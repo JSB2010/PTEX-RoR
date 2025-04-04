@@ -1,0 +1,22 @@
+#!/usr/bin/env ruby
+# Super simple server startup script that just starts the Rails server
+
+require 'fileutils'
+
+# Set up paths
+APP_ROOT = File.expand_path('..', __dir__)
+PID_DIR = File.join(APP_ROOT, 'tmp', 'pids')
+LOG_DIR = File.join(APP_ROOT, 'log')
+
+# Create directories if they don't exist
+FileUtils.mkdir_p(PID_DIR)
+FileUtils.mkdir_p(LOG_DIR)
+
+# Helper method to log messages
+def log(message)
+  puts "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S')}] #{message}"
+end
+
+# Start the Rails server
+log "Starting Rails server..."
+exec("bundle", "exec", "rails", "server", *ARGV)

@@ -1,0 +1,9 @@
+<%=
+  render "shared/error_page",
+         title: "Internal Server Error",
+         message: "We're sorry, but something went wrong on our end.",
+         icon: "exclamation-triangle-fill",
+         color: "danger",
+         back_link: true,
+         details: Rails.env.development? ? @error_message : nil
+%>

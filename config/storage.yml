@@ -1,0 +1,48 @@
+test:
+  service: Disk
+  root: <%= Rails.root.join("tmp/storage") %>
+
+local:
+  service: Disk
+  root: <%= Rails.root.join("storage") %>
+  max_size: <%= 100.megabytes %>
+  content_types:
+    - 'image/jpeg'
+    - 'image/png'
+    - 'image/gif'
+    - 'application/pdf'
+    - 'application/msword'
+    - 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    - 'application/vnd.ms-excel'
+    - 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  
+# Production storage configuration with S3
+amazon:
+  service: S3
+  access_key_id: <%= Rails.application.credentials.dig(:aws, :access_key_id) %>
+  secret_access_key: <%= Rails.application.credentials.dig(:aws, :secret_access_key) %>
+  region: <%= ENV.fetch('AWS_REGION', 'us-east-1') %>
+  bucket: <%= "#{ENV.fetch('AWS_BUCKET_PREFIX', 'ptex')}-#{Rails.env}" %>
+  upload:
+    multipart_threshold: <%= 100.megabytes %>
+    server_side_encryption: AES256
+  public: false
+  max_size: <%= 100.megabytes %>
+  content_types:
+    - 'image/jpeg'
+    - 'image/png'
+    - 'image/gif'
+    - 'application/pdf'
+    - 'application/msword'
+    - 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    - 'application/vnd.ms-excel'
+    - 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+# Mirror configuration for redundancy
+mirror:
+  service: Mirror
+  primary: <%= Rails.env.production? ? :amazon : :local %>
+  mirrors: 
+    - service: Disk
+      root: <%= Rails.root.join("storage/backup") %>
+      max_size: <%= 100.megabytes %>

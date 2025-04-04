@@ -1,0 +1,174 @@
+<%% content_for :page_title do %>
+  System Information
+<%% end %>
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">System Details</h5>
+        <span class="badge bg-<%= @db_status ? 'success' : 'danger' %>">
+          <%= @db_status ? 'System Online' : 'System Issues' %>
+        </span>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Ruby Version</dt>
+          <dd class="col-sm-8"><%= @ruby_version %></dd>
+
+          <dt class="col-sm-4">Rails Version</dt>
+          <dd class="col-sm-8"><%= @rails_version %></dd>
+
+          <dt class="col-sm-4">Environment</dt>
+          <dd class="col-sm-8"><%= Rails.env.capitalize %></dd>
+
+          <dt class="col-sm-4">Database Size</dt>
+          <dd class="col-sm-8"><%= @database_size %></dd>
+
+          <dt class="col-sm-4">Last Restart</dt>
+          <dd class="col-sm-8"><%= File.mtime(Rails.root.join('tmp/restart.txt')).strftime("%Y-%m-%d %H:%M:%S") rescue 'Unknown' %></dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header">
+        <h5 class="mb-0">Service Status</h5>
+      </div>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <i class="bi bi-hdd-rack me-2"></i>Database
+              <small class="text-muted d-block">PostgreSQL</small>
+            </div>
+            <span class="badge bg-<%= @db_status ? 'success' : 'danger' %>">
+              <%= @db_status ? 'Connected' : 'Error' %>
+            </span>
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <i class="bi bi-lightning me-2"></i>Redis Cache
+              <small class="text-muted d-block">Background Jobs & Caching</small>
+            </div>
+            <span class="badge bg-<%= @redis_status ? 'success' : 'danger' %>">
+              <%= @redis_status ? 'Connected' : 'Error' %>
+            </span>
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <i class="bi bi-clock-history me-2"></i>Background Jobs
+              <small class="text-muted d-block">Job Processing Status</small>
+            </div>
+            <span class="badge bg-<%= @sidekiq_status ? 'success' : 'danger' %>">
+              <%= @sidekiq_status ? 'Running' : 'Stopped' %>
+            </span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mt-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">Cache Statistics</h5>
+      </div>
+      <div class="card-body">
+        <%% if @cache_stats.present? %>
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <%% @cache_stats.each do |key, value| %>
+                  <tr>
+                    <td><%= key.to_s.titleize %></td>
+                    <td><%= value %></td>
+                  </tr>
+                <%% end %>
+              </tbody>
+            </table>
+          </div>
+        <%% else %>
+          <p class="text-muted mb-0">Cache statistics not available</p>
+        <%% end %>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">Job Queues</h5>
+      </div>
+      <div class="card-body">
+        <%% if @job_stats.any? %>
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Queue</th>
+                  <th>Jobs</th>
+                </tr>
+              </thead>
+              <tbody>
+                <%% @job_stats.each do |queue, count| %>
+                  <tr>
+                    <td><%= queue %></td>
+                    <td><%= count %></td>
+                  </tr>
+                <%% end %>
+              </tbody>
+            </table>
+          </div>
+        <%% else %>
+          <p class="text-muted mb-0">No jobs in queues</p>
+        <%% end %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Actions</h5>
+      </div>
+      <div class="card-body">
+        <div class="d-flex gap-2">
+          <%= form_tag admin_cleanup_data_path, method: :post, class: 'me-2',
+              data: { turbo_confirm: 'Are you sure? This will permanently delete old data.' } do %>
+            <button type="submit" class="btn btn-warning">
+              <i class="bi bi-trash me-2"></i>Clean Up Old Data
+            </button>
+          <% end %>
+
+          <%= form_tag admin_cleanup_logs_path, method: :post, class: 'me-2',
+              data: { turbo_confirm: 'Are you sure? This will delete log files older than 24 hours.' } do %>
+            <button type="submit" class="btn btn-warning">
+              <i class="bi bi-trash me-2"></i>Clean Up Logs
+            </button>
+          <% end %>
+
+          <%= button_tag type: 'button', class: 'btn btn-secondary', data: { action: 'click->admin#clearCache' } do %>
+            <i class="bi bi-arrow-clockwise me-2"></i>Clear Cache
+          <% end %>
+
+          <%= button_tag type: 'button', class: 'btn btn-info text-white', data: { action: 'click->admin#downloadLogs' } do %>
+            <i class="bi bi-download me-2"></i>Download Logs
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

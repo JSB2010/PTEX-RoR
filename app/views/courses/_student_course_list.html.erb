@@ -1,0 +1,46 @@
+<% if courses.any? %>
+  <div class="table-responsive">
+    <table class="table table-hover">
+      <thead>
+        <tr>
+          <th>Course</th>
+          <th>Level</th>
+          <th>Teacher</th>
+          <th>Grade</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% courses.each do |course| %>
+          <tr>
+            <td><%= course.name %></td>
+            <td>
+              <% case course.level %>
+              <% when 'AP' %>
+                <span class="badge bg-danger">AP</span>
+              <% when 'Honors' %>
+                <span class="badge bg-success">Honors</span>
+              <% else %>
+                <span class="badge bg-secondary">Regular</span>
+              <% end %>
+            </td>
+            <td><%= course.teacher.first_name %> <%= course.teacher.last_name %></td>
+            <td>
+              <% grade = course.grades.find_by(user: current_user) %>
+              <%= grade&.letter_grade || 'N/A' %>
+              (<%= number_with_precision(grade&.numeric_grade || 0, precision: 1) %>%)
+            </td>
+            <td>
+              <%= link_to 'View', course_path(course), class: 'btn btn-sm btn-primary' %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <div class="text-center text-muted py-4">
+    <i class="bi bi-book h4 d-block mb-2"></i>
+    You are not enrolled in any courses
+  </div>
+<% end %>

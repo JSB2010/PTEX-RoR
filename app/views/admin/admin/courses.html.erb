@@ -1,0 +1,198 @@
+<% content_for :page_title do %>
+  Course Management
+<% end %>
+
+<% content_for :page_actions do %>
+  <%= link_to new_course_path, class: 'btn btn-success' do %>
+    <i class="bi bi-plus-circle-fill me-2"></i>Add New Course
+  <% end %>
+<% end %>
+
+<div class="card">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th>Course</th>
+            <th>Teacher</th>
+            <th>Students</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @courses.each do |course| %>
+            <tr>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="flex-shrink-0">
+                    <div class="bg-light rounded-circle p-3">
+                      <i class="bi bi-book fs-4 text-primary"></i>
+                    </div>
+                  </div>
+                  <div class="flex-grow-1 ms-3">
+                    <div class="fw-bold"><%= course.name %></div>
+                    <div class="small text-muted">
+                      Created: <%= course.created_at.strftime("%B %d, %Y") %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <%= course.teacher.full_name %>
+                <div class="small text-muted"><%= course.teacher.email %></div>
+              </td>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="me-2"><%= course.students.count %></div>
+                  <% if course.students.any? %>
+                    <button class="btn btn-sm btn-outline-info"
+                            data-bs-toggle="modal"
+                            data-bs-target="#studentListModal"
+                            data-action="view-students"
+                            data-course-id="<%= course.id %>"
+                            data-course-name="<%= course.name %>">
+                      <i class="bi bi-people-fill me-1"></i>View List
+                    </button>
+                  <% end %>
+                </div>
+              </td>
+              <td>
+                <div class="btn-group">
+                  <%= link_to course_path(course), class: 'btn btn-sm btn-outline-info', title: 'View course details' do %>
+                    <i class="bi bi-eye-fill"></i>
+                  <% end %>
+                  
+                  <%= link_to edit_course_path(course), class: 'btn btn-sm btn-outline-primary', title: 'Edit course' do %>
+                    <i class="bi bi-pencil-square"></i>
+                  <% end %>
+
+                  <button type="button" 
+                          class="btn btn-sm btn-outline-success"
+                          data-bs-toggle="modal"
+                          data-bs-target="#addStudentsModal"
+                          data-course-id="<%= course.id %>"
+                          title="Add students">
+                    <i class="bi bi-person-plus-fill"></i>
+                  </button>
+                  
+                  <%= button_to course_path(course),
+                      method: :delete,
+                      class: 'btn btn-sm btn-outline-danger',
+                      title: 'Delete course',
+                      data: { 
+                        turbo_confirm: 'Are you sure? This will permanently delete all associated data.'
+                      } do %>
+                    <i class="bi bi-trash3-fill"></i>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%# Update the student list modal with Stimulus %>
+<div class="modal fade" 
+     id="studentListModal" 
+     tabindex="-1"
+     data-controller="student-list">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" data-student-list-target="title">Course Students</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="table align-middle" data-student-list-target="table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Grade</th>
+                <th>Last Updated</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <%# Populated via JavaScript %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%# Add JavaScript for handling student list modal %>
+<% content_for :scripts do %>
+  <script>
+    document.addEventListener('turbo:load', function() {
+      // Initialize tooltips
+      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+      tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+      })
+
+      // Handle student list button clicks
+      document.querySelectorAll('[data-action="view-students"]').forEach(button => {
+        button.addEventListener('click', function() {
+          const courseId = this.dataset.courseId
+          const courseName = this.dataset.courseName
+          const modal = document.getElementById('studentListModal')
+          const modalTitle = modal.querySelector('.modal-title')
+          const tbody = modal.querySelector('tbody')
+          
+          modalTitle.textContent = `Students - ${courseName}`
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm me-2"></div>Loading students...</td></tr>'
+
+          fetch(`/admin/courses/${courseId}/students`)
+            .then(response => response.json())
+            .then(data => {
+              if (data.students && data.students.length > 0) {
+                tbody.innerHTML = data.students.map(student => `
+                  <tr>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                          <div class="bg-light rounded-circle p-2">
+                            <i class="bi bi-person"></i>
+                          </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                          <div>${student.name}</div>
+                          <small class="text-muted">${student.email}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge bg-${student.grade_class}">${student.grade || 'N/A'}</span>
+                    </td>
+                    <td>
+                      <small class="text-muted">${student.updated_at || 'Never'}</small>
+                    </td>
+                    <td>
+                      <button class="btn btn-sm btn-outline-primary" title="Edit grade">
+                        <i class="bi bi-pencil-square"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger" title="Remove student">
+                        <i class="bi bi-person-x"></i>
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')
+              } else {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4"><i class="bi bi-people h4 d-block mb-2"></i>No students enrolled</td></tr>'
+              }
+            })
+            .catch(() => {
+              tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error loading students</td></tr>'
+            })
+        })
+      })
+    })
+  </script>
+<% end %>

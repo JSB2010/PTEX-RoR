@@ -1,0 +1,31 @@
+<div class="card">
+  <div class="card-body">
+    <%= form_with(model: course) do |form| %>
+      <% if course.errors.any? %>
+        <div class="alert alert-danger">
+          <h4><%= pluralize(course.errors.count, "error") %> prohibited this course from being saved:</h4>
+          <ul>
+            <% course.errors.each do |error| %>
+              <li><%= error.full_message %></li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <div class="mb-3">
+        <%= form.label :name, class: "form-label" %>
+        <%= form.text_field :name, class: "form-control" %>
+      </div>
+
+      <div class="mb-3">
+        <%= form.label :level, class: "form-label" %>
+        <%= form.select :level, Course::LEVELS, {}, class: "form-select" %>
+      </div>
+
+      <div class="actions">
+        <%= form.submit class: "btn btn-primary" %>
+        <%= link_to "Cancel", courses_path, class: "btn btn-outline-secondary" %>
+      </div>
+    <% end %>
+  </div>
+</div>

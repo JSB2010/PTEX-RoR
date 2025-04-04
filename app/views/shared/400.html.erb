@@ -1,0 +1,9 @@
+<%=
+  render "shared/error_page",
+         title: "Bad Request",
+         message: "The request could not be understood by the server.",
+         icon: "slash-circle",
+         color: "warning",
+         back_link: true,
+         details: Rails.env.development? ? exception&.message : nil
+%>

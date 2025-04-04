@@ -1,0 +1,775 @@
+<%# Health Status Dashboard %>
+<div class="container-fluid py-4">
+  <!-- Diagnostic Summary Section -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white">
+      <div class="d-flex justify-content-between align-items-center">
+        <h1 class="h3 mb-0">System Health Status</h1>
+        <span class="badge <%= @health_data[:status] == 'ok' ? 'bg-success' : (@health_data[:status] == 'warning' ? 'bg-warning' : 'bg-danger') %> fs-5 px-3 py-2">
+          <%= @health_data[:status].upcase %>
+        </span>
+      </div>
+    </div>
+    <div class="card-body p-4">
+      <h5 class="mb-3">Diagnostic Summary</h5>
+      <div class="alert <%= @health_data[:status] == 'ok' ? 'alert-success' : (@health_data[:status] == 'warning' ? 'alert-warning' : 'alert-danger') %> mb-4">
+        <p class="lead mb-0"><%= @health_data[:summary][:message] %></p>
+      </div>
+
+      <% if @health_data[:diagnostic_summary].present? %>
+        <div class="list-group mb-4">
+          <% @health_data[:diagnostic_summary].each do |detail| %>
+            <div class="list-group-item <%= detail.include?('CRITICAL') ? 'list-group-item-danger' : (detail.include?('WARNING') ? 'list-group-item-warning' : 'list-group-item-light') %>">
+              <%= detail %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
+      <!-- Status at a Glance -->
+      <h5 class="mb-3">Status at a Glance</h5>
+      <div class="row g-3 mb-4">
+        <% @health_data[:summary][:components].each do |component, status| %>
+          <div class="col-md-4 col-lg-3 col-xl-2">
+            <div class="d-flex align-items-center p-3 border rounded">
+              <div class="status-indicator <%= status == 'ok' ? 'bg-success' : (status == 'warning' ? 'bg-warning' : 'bg-danger') %> me-2"></div>
+              <div>
+                <div class="text-capitalize"><%= component.to_s.humanize %></div>
+                <small class="text-muted text-capitalize"><%= status %></small>
+              </div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <!-- Issues that Need Attention -->
+      <% if @health_data[:issues].any? %>
+        <h5 class="mb-3">Issues Requiring Attention</h5>
+        <div class="table-responsive mb-0">
+          <table class="table table-sm table-hover">
+            <thead class="table-light">
+              <tr>
+                <th>Severity</th>
+                <th>Component</th>
+                <th>Issue</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% @health_data[:issues].each do |issue| %>
+                <tr>
+                  <td>
+                    <span class="badge <%= issue[:severity] == 'critical' ? 'bg-danger' : 'bg-warning' %>">
+                      <%= issue[:severity].upcase %>
+                    </span>
+                  </td>
+                  <td><%= issue[:component] %></td>
+                  <td><%= issue[:message] %></td>
+                  <td><small class="text-muted"><%= issue[:details] %></small></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <div class="alert alert-success">
+          <i class="bi bi-check-circle-fill me-2"></i> All systems are operational. No issues detected.
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="h4 mb-0">Detailed Diagnostics</h2>
+    <div>
+      <span class="badge bg-secondary me-2">
+        <i class="bi bi-clock me-1"></i>
+        <%= Time.parse(@health_data[:timestamp]).strftime("%B %d, %Y at %H:%M:%S %Z") %>
+      </span>
+      <a href="#" class="btn btn-sm btn-outline-primary" onclick="window.location.reload(); return false;">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+      </a>
+    </div>
+  </div>
+
+  <!-- System Information Section -->
+  <div class="row g-4">
+    <!-- System Overview -->
+    <div class="col-md-6 col-xl-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">System Info</h5>
+          <i class="bi bi-cpu fs-4 text-primary"></i>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="text-muted">CPU Usage</span>
+              <span class="badge <%= @health_data[:system][:cpu_usage] > 80 ? 'bg-danger' : (@health_data[:system][:cpu_usage] > 60 ? 'bg-warning' : 'bg-success') %>">
+                <%= number_to_percentage(@health_data[:system][:cpu_usage], precision: 1) %>
+              </span>
+            </div>
+            <div class="progress" style="height: 6px;">
+              <div class="progress-bar <%= @health_data[:system][:cpu_usage] > 80 ? 'bg-danger' : (@health_data[:system][:cpu_usage] > 60 ? 'bg-warning' : 'bg-success') %>"
+                   style="width: <%= @health_data[:system][:cpu_usage] %>%">
+              </div>
+            </div>
+          </div>
+
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Hostname</span>
+                <span class="fw-medium"><%= @health_data[:system][:hostname] %></span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">System Uptime</span>
+                <span class="fw-medium"><%= @health_data[:system][:uptime] %></span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Load Average</span>
+                <span class="fw-medium">
+                  <%= @health_data[:system][:load_average].map { |l| number_with_precision(l, precision: 2) }.join(' / ') %>
+                </span>
+              </div>
+            </li>
+            <li>
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Process Info</span>
+                <span class="fw-medium">
+                  PID: <%= @health_data[:system][:process_info][:pid] %>
+                  <span class="text-muted">|</span>
+                  <%= @health_data[:system][:process_info][:uptime] %>
+                </span>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div class="card-footer bg-transparent">
+          <button class="btn btn-sm btn-outline-secondary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#systemDetails">
+            <i class="bi bi-info-circle me-1"></i>More Details
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Database Health -->
+    <div class="col-md-6 col-xl-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Database</h5>
+          <span class="badge <%= @health_data[:database][:connected] ? 'bg-success' : 'bg-danger' %>">
+            <%= @health_data[:database][:connected] ? 'Connected' : 'Disconnected' %>
+          </span>
+        </div>
+        <div class="card-body">
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Adapter</span>
+                <span class="fw-medium"><%= @health_data[:database][:adapter] %></span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Version</span>
+                <span class="fw-medium text-truncate" style="max-width: 200px;" title="<%= @health_data[:database][:version] %>">
+                  <%= @health_data[:database][:version] %>
+                </span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Database Size</span>
+                <span class="fw-medium"><%= @health_data[:database][:database_size] %></span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Pool Size</span>
+                <span class="fw-medium"><%= @health_data[:database][:pool_size] %></span>
+              </div>
+            </li>
+            <li>
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Active Connections</span>
+                <span class="fw-medium">
+                  <%= @health_data[:database][:active_connections] %> / <%= @health_data[:database][:pool_size] %>
+                </span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Redis Health -->
+    <div class="col-md-6 col-xl-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Redis</h5>
+          <span class="badge <%= @health_data[:redis][:connected] ? 'bg-success' : 'bg-danger' %>">
+            <%= @health_data[:redis][:connected] ? 'Connected' : 'Disconnected' %>
+          </span>
+        </div>
+        <div class="card-body">
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Memory Usage</span>
+                <span class="fw-medium"><%= @health_data[:redis][:used_memory] %></span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Connected Clients</span>
+                <span class="fw-medium"><%= @health_data[:redis][:clients] %></span>
+              </div>
+            </li>
+            <li>
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Uptime</span>
+                <span class="fw-medium"><%= @health_data[:redis][:uptime_days] %> days</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Job System Health -->
+    <div class="col-md-6 col-xl-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Background Jobs</h5>
+          <span class="badge <%= @health_data[:job_system][:status] == 'ok' ? 'bg-success' : (@health_data[:job_system][:status] == 'warning' ? 'bg-warning' : 'bg-danger') %>">
+            <%= @health_data[:job_system][:status].upcase %>
+          </span>
+        </div>
+        <div class="card-body">
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Adapter</span>
+                <span class="fw-medium"><%= @health_data[:job_system][:adapter] %></span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Active Workers</span>
+                <span class="fw-medium"><%= @health_data[:job_system][:active_workers] %></span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Dispatcher Running</span>
+                <span class="fw-medium">
+                  <% if @health_data[:job_system][:dispatcher_running] %>
+                    <i class="bi bi-check-circle-fill text-success"></i> Yes
+                  <% else %>
+                    <i class="bi bi-x-circle-fill text-danger"></i> No
+                  <% end %>
+                </span>
+              </div>
+            </li>
+            <li>
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Recent Jobs</span>
+                <span class="fw-medium">
+                  <span class="text-success"><%= @health_data[:job_system][:recent_jobs][:completed] %> completed</span> /
+                  <span class="text-danger"><%= @health_data[:job_system][:recent_jobs][:failed] %> failed</span>
+                </span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- System Details Collapse -->
+  <div class="collapse mt-4" id="systemDetails">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header">
+        <h5 class="mb-0">Advanced System Information</h5>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-6">
+            <h6 class="border-bottom pb-2 mb-3">Process Details</h6>
+            <dl class="row mb-0">
+              <dt class="col-sm-4">Memory Usage</dt>
+              <dd class="col-sm-8"><%= @health_data[:system][:process_info][:memory_usage] %></dd>
+
+              <dt class="col-sm-4">Threads</dt>
+              <dd class="col-sm-8"><%= @health_data[:system][:process_info][:threads] %></dd>
+
+              <dt class="col-sm-4">Open Files</dt>
+              <dd class="col-sm-8"><%= @health_data[:system][:process_info][:open_files] %></dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="border-bottom pb-2 mb-3">Ruby Environment</h6>
+            <dl class="row mb-0">
+              <dt class="col-sm-4">Ruby Version</dt>
+              <dd class="col-sm-8"><%= @health_data[:ruby_version] %></dd>
+
+              <dt class="col-sm-4">Rails Version</dt>
+              <dd class="col-sm-8"><%= @health_data[:rails_version] %></dd>
+
+              <dt class="col-sm-4">Environment</dt>
+              <dd class="col-sm-8">
+                <span class="badge bg-<%= @health_data[:environment] == 'production' ? 'danger' : (@health_data[:environment] == 'staging' ? 'warning' : 'info') %>">
+                  <%= @health_data[:environment].upcase %>
+                </span>
+              </dd>
+
+              <dt class="col-sm-4">GC Enabled</dt>
+              <dd class="col-sm-8"><%= @health_data[:system][:ruby_info][:gc_enabled] ? 'Yes' : 'No' %></dd>
+            </dl>
+          </div>
+        </div>
+
+        <h6 class="border-bottom pb-2 mb-3 mt-4">Environment Variables</h6>
+        <div class="row">
+          <% @health_data[:system][:process_info][:environment_variables].each do |key, value| %>
+            <div class="col-md-6 mb-2">
+              <code><%= key %>=<%= value %></code>
+            </div>
+          <% end %>
+        </div>
+
+        <h6 class="border-bottom pb-2 mb-3 mt-4">Top Loaded Gems</h6>
+        <div class="row">
+          <% @health_data[:system][:ruby_info][:loaded_gems].each do |gem| %>
+            <div class="col-md-3 mb-2">
+              <code><%= gem[:name] %> (<%= gem[:version] %>)</code>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Disk and Network Section -->
+  <div class="row g-4 mt-2">
+    <!-- Disk Space -->
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Disk Space</h5>
+          <span class="badge <%= @health_data[:disk][:status] == 'ok' ? 'bg-success' : (@health_data[:disk][:status] == 'warning' ? 'bg-warning' : 'bg-danger') %>">
+            <%= @health_data[:disk][:status].upcase %>
+          </span>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th>Mount Point</th>
+                  <th>Size</th>
+                  <th>Used</th>
+                  <th>Available</th>
+                  <th>Usage</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @health_data[:disk][:disks].first(5).each do |mount, info| %>
+                  <tr>
+                    <td><%= mount %></td>
+                    <td><%= info[:size] rescue 'N/A' %></td>
+                    <td><%= info[:used] rescue 'N/A' %></td>
+                    <td><%= info[:available] rescue 'N/A' %></td>
+                    <td>
+                      <% if info[:capacity].present? %>
+                        <div class="d-flex align-items-center">
+                          <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                            <div class="progress-bar <%= info[:status] == 'critical' ? 'bg-danger' : (info[:status] == 'warning' ? 'bg-warning' : 'bg-success') %>"
+                                 style="width: <%= info[:capacity] %>%">
+                            </div>
+                          </div>
+                          <small><%= info[:capacity] %>%</small>
+                        </div>
+                      <% else %>
+                        <span class="badge <%= info[:status] == 'ok' ? 'bg-success' : 'bg-warning' %>">
+                          <%= info[:status].upcase %>
+                        </span>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Network Status -->
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Network Status</h5>
+          <span class="badge <%= @health_data[:network][:status] == 'ok' ? 'bg-success' : 'bg-danger' %>">
+            <%= @health_data[:network][:status].upcase %>
+          </span>
+        </div>
+        <div class="card-body">
+          <h6 class="mb-3">Network Interfaces</h6>
+          <div class="table-responsive mb-4">
+            <table class="table table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th>Interface</th>
+                  <th>IP Address</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @health_data[:network][:interfaces].select { |k, v| k.is_a?(String) && !k.include?('connectivity') && !k.include?('dns') }.each do |interface, info| %>
+                  <tr>
+                    <td><%= interface %></td>
+                    <td><code><%= info[:ip].presence || 'None' %></code></td>
+                    <td>
+                      <span class="badge <%= info[:status] == 'up' ? 'bg-success' : 'bg-danger' %>">
+                        <%= info[:status].upcase %>
+                      </span>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+
+          <h6 class="mb-3">Connectivity Checks</h6>
+          <ul class="list-group">
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              External Connectivity
+              <span class="badge <%= @health_data[:network][:interfaces]['external_connectivity'][:status] == 'ok' ? 'bg-success' : 'bg-danger' %>">
+                <%= @health_data[:network][:interfaces]['external_connectivity'][:status].upcase %>
+              </span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              DNS Resolution
+              <span class="badge <%= @health_data[:network][:interfaces]['dns_resolution'][:status] == 'ok' ? 'bg-success' : 'bg-danger' %>">
+                <%= @health_data[:network][:interfaces]['dns_resolution'][:status].upcase %>
+              </span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memory Stats -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h5 class="mb-0">Memory Statistics</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <div class="mb-3">
+                <h6 class="text-muted mb-2">Ruby Heap</h6>
+                <div class="progress mb-2" style="height: 8px;">
+                  <% heap_usage_percent = (@health_data[:memory][:heap_live].to_f / @health_data[:memory][:heap_available] * 100).round(1) %>
+                  <div class="progress-bar <%= heap_usage_percent > 80 ? 'bg-danger' : 'bg-success' %>"
+                       style="width: <%= heap_usage_percent %>%">
+                  </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <small class="text-muted">Live Objects: <%= number_with_delimiter(@health_data[:memory][:heap_live]) %></small>
+                  <small class="text-muted">Available Slots: <%= number_with_delimiter(@health_data[:memory][:heap_available]) %></small>
+                  <small class="text-muted"><%= number_to_percentage(heap_usage_percent, precision: 1) %> Used</small>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="mb-3">
+                <h6 class="text-muted mb-2">Object Allocation</h6>
+                <div class="d-flex justify-content-between mb-2">
+                  <span>Total Allocated: <%= number_with_delimiter(@health_data[:memory][:total_allocated]) %></span>
+                  <span>Total Freed: <%= number_with_delimiter(@health_data[:memory][:total_freed]) %></span>
+                </div>
+                <div class="d-flex justify-content-between">
+                  <span>GC Count: <%= number_with_delimiter(@health_data[:memory][:gc_count]) %></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Request Statistics -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Request Statistics</h5>
+          <span class="badge bg-secondary">Last Hour</span>
+        </div>
+        <div class="card-body">
+          <div class="row mb-4">
+            <div class="col-md-4">
+              <div class="text-center p-3 border rounded">
+                <h3 class="mb-1"><%= number_with_delimiter(@health_data[:request_stats][:last_hour][:total]) %></h3>
+                <div class="text-muted">Total Requests</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="text-center p-3 border rounded">
+                <h3 class="mb-1"><%= number_to_percentage(@health_data[:request_stats][:last_hour][:success_rate], precision: 1) %></h3>
+                <div class="text-muted">Success Rate</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="text-center p-3 border rounded">
+                <h3 class="mb-1"><%= @health_data[:request_stats][:last_hour][:avg_response_time] %> ms</h3>
+                <div class="text-muted">Avg Response Time</div>
+              </div>
+            </div>
+          </div>
+
+          <h6 class="mb-3">Status Codes</h6>
+          <div class="row mb-4">
+            <% @health_data[:request_stats][:last_hour][:status_codes].each do |code, count| %>
+              <div class="col-md-3 col-6 mb-3">
+                <div class="d-flex justify-content-between align-items-center p-2 border rounded">
+                  <div>
+                    <span class="badge <%= code.to_s.start_with?('2') ? 'bg-success' : (code.to_s.start_with?('5') ? 'bg-danger' : 'bg-warning') %>">
+                      <%= code %>
+                    </span>
+                  </div>
+                  <div class="fs-5 fw-medium"><%= count %></div>
+                </div>
+              </div>
+            <% end %>
+          </div>
+
+          <h6 class="mb-3">Top Endpoints</h6>
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Requests</th>
+                  <th>Avg Response Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @health_data[:request_stats][:endpoints].each do |endpoint, data| %>
+                  <tr>
+                    <td><code><%= endpoint %></code></td>
+                    <td><%= data[:count] %></td>
+                    <td>
+                      <span class="<%= data[:avg_time] > 200 ? 'text-danger' : (data[:avg_time] > 100 ? 'text-warning' : 'text-success') %>">
+                        <%= data[:avg_time] %> ms
+                      </span>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Logs -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Recent Errors</h5>
+          <span class="badge <%= @health_data[:errors][:count] > 0 ? 'bg-warning' : 'bg-success' %>">
+            <%= @health_data[:errors][:count] %> Errors
+          </span>
+        </div>
+        <div class="card-body">
+          <% if @health_data[:errors][:recent].any? %>
+            <div class="table-responsive">
+              <table class="table table-sm">
+                <thead class="table-light">
+                  <tr>
+                    <th>Error</th>
+                    <th>Count</th>
+                    <th>Last Seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @health_data[:errors][:recent].each do |error| %>
+                    <tr>
+                      <td><code class="text-danger"><%= error[:error] %></code></td>
+                      <td><%= error[:count] %></td>
+                      <td><small class="text-muted"><%= error[:last_seen] %></small></td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <div class="alert alert-success mb-0">
+              <i class="bi bi-check-circle-fill me-2"></i> No errors detected in recent logs.
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dependencies -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h5 class="mb-0">External Dependencies</h5>
+        </div>
+        <div class="card-body">
+          <div class="row mb-4">
+            <% @health_data[:dependencies][:services].each do |service, info| %>
+              <div class="col-md-4 mb-3">
+                <div class="d-flex justify-content-between align-items-center p-3 border rounded">
+                  <div>
+                    <h6 class="mb-1 text-capitalize"><%= service %></h6>
+                    <small class="text-muted"><%= info[:message] %></small>
+                  </div>
+                  <span class="badge <%= info[:status] == 'ok' ? 'bg-success' : (info[:status] == 'warning' ? 'bg-warning' : 'bg-danger') %>">
+                    <%= info[:status].upcase %>
+                  </span>
+                </div>
+              </div>
+            <% end %>
+          </div>
+
+          <h6 class="mb-3">Outdated Gems</h6>
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th>Gem</th>
+                  <th>Current Version</th>
+                  <th>Latest Version</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @health_data[:dependencies][:services]['gems'][:outdated].each do |gem| %>
+                  <tr>
+                    <td><%= gem[:name] %></td>
+                    <td><code><%= gem[:current] %></code></td>
+                    <td>
+                      <code class="<%= gem[:current] != gem[:latest] ? 'text-warning' : '' %>">
+                        <%= gem[:latest] %>
+                      </code>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timestamp -->
+  <div class="row mt-4 mb-3">
+    <div class="col-12">
+      <div class="text-center text-muted">
+        <small>Last updated: <%= Time.parse(@health_data[:timestamp]).strftime("%B %d, %Y at %H:%M:%S %Z") %></small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<% content_for :styles do %>
+  <style>
+    .card {
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+    }
+    .progress {
+      background-color: rgba(0,0,0,.05);
+    }
+    .progress-bar {
+      background-color: var(--bs-primary);
+    }
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+    }
+    .bg-success {
+      background-color: #10b981 !important;
+    }
+    .bg-warning {
+      background-color: #f59e0b !important;
+    }
+    .bg-danger {
+      background-color: #ef4444 !important;
+    }
+    .table-sm td, .table-sm th {
+      padding: 0.5rem;
+    }
+    code {
+      background-color: rgba(0,0,0,.05);
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 85%;
+    }
+    .text-danger {
+      color: #ef4444 !important;
+    }
+    .text-warning {
+      color: #f59e0b !important;
+    }
+    .text-success {
+      color: #10b981 !important;
+    }
+
+    /* Dark mode adjustments */
+    html.dark-theme .card {
+      background-color: #1f2937;
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+    html.dark-theme .table-light {
+      background-color: #374151;
+      color: #f3f4f6;
+    }
+    html.dark-theme code {
+      background-color: rgba(255, 255, 255, 0.1);
+      color: #f3f4f6;
+    }
+    html.dark-theme .border {
+      border-color: rgba(255, 255, 255, 0.1) !important;
+    }
+    html.dark-theme .list-group-item {
+      background-color: #1f2937;
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+  </style>
+<% end %>
+
+<% content_for :scripts do %>
+  <script>
+    document.addEventListener('turbo:load', function() {
+      // Auto-refresh the page every 60 seconds
+      setTimeout(function() {
+        Turbo.visit(window.location.href)
+      }, 60000)
+    })
+  </script>
+<% end %>

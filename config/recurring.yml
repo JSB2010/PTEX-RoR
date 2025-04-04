@@ -1,0 +1,3 @@
+default: &default
+  clean_metrics_data:
+    class_name: Clean

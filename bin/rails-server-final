@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Start the Rails server with all necessary services
+
+# Function to log messages with timestamps
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Start PostgreSQL if it's not running
+if ! pg_isready -q; then
+  log "Starting PostgreSQL..."
+  brew services start postgresql@14
+
+  # Wait for PostgreSQL to start with a timeout
+  start_time=$(date +%s)
+  pg_started=false
+
+  while [ $(($(date +%s) - start_time)) -lt 30 ]; do
+    sleep 1
+    if pg_isready -q; then
+      pg_started=true
+      break
+    fi
+  done
+
+  if [ "$pg_started" = false ]; then
+    log "ERROR: Failed to start PostgreSQL within timeout. Please start it manually."
+    exit 1
+  fi
+
+  log "PostgreSQL started successfully."
+else
+  log "PostgreSQL is already running."
+fi
+
+# Start Redis if it's not running
+if ! redis-cli ping > /dev/null 2>&1; then
+  log "Starting Redis..."
+  brew services start redis
+
+  # Wait for Redis to start with a timeout
+  start_time=$(date +%s)
+  redis_started=false
+
+  while [ $(($(date +%s) - start_time)) -lt 20 ]; do
+    sleep 1
+    if redis-cli ping > /dev/null 2>&1; then
+      redis_started=true
+      break
+    fi
+  done
+
+  if [ "$redis_started" = false ]; then
+    log "ERROR: Failed to start Redis within timeout. Please start it manually."
+    exit 1
+  fi
+
+  log "Redis started successfully."
+else
+  log "Redis is already running."
+fi
+
+# Clean up log files if they're too large
+log "Checking log files..."
+for log_file in log/*.log; do
+  if [ -f "$log_file" ]; then
+    size=$(du -m "$log_file" 2>/dev/null | cut -f1) || size=0
+    if [ "$size" -gt 10 ]; then
+      log "Cleaning up large log file: $log_file ($size MB)"
+      cat /dev/null > "$log_file" 2>/dev/null || log "Failed to clean $log_file"
+    fi
+  fi
+done
+
+# Kill any existing SolidQueue processes
+log "Checking for existing SolidQueue processes..."
+pkill_output=$(pgrep -f "solid_queue_monitor.rb" || echo "")
+if [ -n "$pkill_output" ]; then
+  log "Killing existing SolidQueue processes: $pkill_output"
+  pkill -f solid_queue_monitor.rb
+  sleep 2
+
+  # Double-check that processes are actually killed
+  pkill_output=$(pgrep -f "solid_queue_monitor.rb" || echo "")
+  if [ -n "$pkill_output" ]; then
+    log "Forcefully killing remaining processes: $pkill_output"
+    pkill -9 -f solid_queue_monitor.rb
+    sleep 1
+  fi
+fi
+
+# Kill any existing Rails runner processes
+log "Checking for existing Rails runner processes..."
+pkill_output=$(pgrep -f "rails runner" || echo "")
+if [ -n "$pkill_output" ]; then
+  log "Killing existing Rails runner processes: $pkill_output"
+  pkill -f "rails runner"
+  sleep 2
+
+  # Double-check that processes are actually killed
+  pkill_output=$(pgrep -f "rails runner" || echo "")
+  if [ -n "$pkill_output" ]; then
+    log "Forcefully killing remaining processes: $pkill_output"
+    pkill -9 -f "rails runner"
+    sleep 1
+  fi
+fi
+
+# Clean up any stale PID files
+log "Cleaning up stale PID files..."
+find tmp/pids -name "*.pid" -delete 2>/dev/null || true
+find tmp/pids -name "*.lock" -delete 2>/dev/null || true
+
+# Set environment variable to use inline adapter for ActiveJob
+export ACTIVE_JOB_ADAPTER=inline
+export SKIP_SOLID_QUEUE=true
+
+# Clean up stale processes in the database
+log "Cleaning up database records..."
+bin/rails runner 'begin; SolidQueue::Process.where(hostname: Socket.gethostname).destroy_all; rescue => e; puts "Error cleaning up stale processes: #{e.message}"; end' || true
+
+# Start the Rails server
+log "Starting Rails server..."
+exec bundle exec rails server "$@"

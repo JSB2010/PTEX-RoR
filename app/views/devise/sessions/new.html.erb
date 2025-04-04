@@ -1,0 +1,51 @@
+<% content_for :head do %>
+  <%= stylesheet_link_tag 'auth', media: 'all', 'data-turbo-track': 'reload' %>
+<% end %>
+
+<div class="auth-container d-flex align-items-center py-5">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <div class="auth-card p-4 p-lg-5">
+          <div class="auth-header-icon">
+            <i class="bi bi-shield-lock"></i>
+          </div>
+          <h2 class="auth-title">Welcome Back</h2>
+          <p class="auth-subtitle">Sign in to continue to PTEX</p>
+
+          <%= form_for(resource, as: resource_name, url: session_path(resource_name), html: { "data-turbo": false }) do |f| %>
+            <div class="form-floating mb-3">
+              <%= f.text_field :login, autofocus: true, class: "form-control #{'is-invalid' if flash[:alert]}", placeholder: "Username or Email" %>
+              <%= f.label :login, "Username or Email" %>
+              <% if flash[:alert] %>
+                <div class="invalid-feedback"><%= flash[:alert] %></div>
+              <% end %>
+            </div>
+
+            <div class="form-floating mb-4">
+              <%= f.password_field :password, class: "form-control #{'is-invalid' if flash[:alert]}", placeholder: "Password" %>
+              <%= f.label :password %>
+            </div>
+
+            <% if devise_mapping.rememberable? %>
+              <div class="form-check mb-4">
+                <%= f.check_box :remember_me, class: "form-check-input" %>
+                <%= f.label :remember_me, class: "form-check-label" %>
+              </div>
+            <% end %>
+
+            <%= f.submit "Sign in", class: "btn btn-primary w-100 auth-btn mb-3" %>
+            
+            <div class="auth-divider">
+              <span>Or</span>
+            </div>
+            
+            <div class="auth-links">
+              <%= render "devise/shared/links" %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

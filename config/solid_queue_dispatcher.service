@@ -1,0 +1,15 @@
+[Unit]
+Description=SolidQueue Dispatcher Process
+After=network.target
+
+[Service]
+Type=simple
+User=jbarkin28
+WorkingDirectory=/Users/jbarkin28/PTEX-RoR
+Environment=RAILS_ENV=development
+ExecStart=/Users/jbarkin28/.rbenv/shims/bundle exec rails solid_queue:process type=dispatcher
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

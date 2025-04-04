@@ -1,0 +1,133 @@
+<div class="row mb-4">
+  <div class="col">
+    <div class="d-flex justify-content-between align-items-center">
+      <h1 class="h3 mb-0">
+        <i class="bi bi-book me-2"></i>Courses
+      </h1>
+      <% if current_user.teacher? %>
+        <%= link_to new_course_path, class: "btn btn-success" do %>
+          <i class="bi bi-plus-circle-fill me-2"></i>New Course
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <% @courses.each do |course| %>
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title d-flex justify-content-between align-items-center mb-3">
+            <%= course.name %>
+            <% if current_user.teacher? && course.teacher == current_user %>
+              <div class="dropdown">
+                <button class="btn btn-link text-muted p-0" data-bs-toggle="dropdown" title="Course actions">
+                  <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li>
+                    <%= link_to edit_course_path(course), class: "dropdown-item" do %>
+                      <i class="bi bi-pencil-square me-2"></i>Edit Course
+                    <% end %>
+                  </li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li>
+                    <%= button_to course_path(course), 
+                        method: :delete, 
+                        class: "dropdown-item text-danger",
+                        form: { data: { turbo_confirm: "Are you sure? This will permanently delete this course and all associated grades." } } do %>
+                      <i class="bi bi-trash3 me-2"></i>Delete Course
+                    <% end %>
+                  </li>
+                </ul>
+              </div>
+            <% end %>
+          </h5>
+
+          <p class="card-text text-muted mb-3">
+            <i class="bi bi-mortarboard me-2"></i><%= course.teacher.full_name %>
+            <br>
+            <i class="bi bi-people me-2"></i><%= pluralize(course.students.count, 'student') %>
+          </p>
+
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="badge bg-<%= { 'AP' => 'danger', 'Honors' => 'warning', 'Regular' => 'primary' }[course.level] %>">
+              <%= course.level %>
+            </span>
+            <div class="btn-group">
+              <%= link_to course_path(course), class: 'btn btn-sm btn-outline-info', title: 'View course details' do %>
+                <i class="bi bi-eye-fill"></i>
+              <% end %>
+              
+              <%= link_to edit_course_path(course), class: 'btn btn-sm btn-outline-primary', title: 'Edit course' do %>
+                <i class="bi bi-pencil-square"></i>
+              <% end %>
+
+              <button class="btn btn-sm btn-outline-primary" type="button"
+                      data-bs-toggle="modal"
+                      data-bs-target="#courseDetailsModal"
+                      data-course-id="<%= course.id %>"
+                      data-bs-tooltip="true"
+                      title="View course details">
+                <i class="bi bi-info-circle-fill me-1"></i>Details
+              </button>
+
+              <button type="button" 
+                      class="btn btn-sm btn-outline-success"
+                      data-bs-toggle="modal"
+                      data-bs-target="#addStudentsModal"
+                      data-course-id="<%= course.id %>"
+                      title="Add students">
+                <i class="bi bi-person-plus-fill"></i>
+              </button>
+              
+              <%= button_to course_path(course),
+                  method: :delete,
+                  class: 'btn btn-sm btn-outline-danger',
+                  title: 'Delete course',
+                  data: { 
+                    turbo_confirm: 'Are you sure? This will permanently delete all associated data.'
+                  } do %>
+                <i class="bi bi-trash3-fill"></i>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <% if @courses.empty? %>
+    <div class="col-12">
+      <div class="text-center text-muted py-5">
+        <i class="bi bi-inbox display-1 mb-3"></i>
+        <h4>No Courses Found</h4>
+        <p>
+          <% if current_user.teacher? %>
+            You haven't created any courses yet.
+            <%= link_to new_course_path, class: "btn btn-success mt-3" do %>
+              <i class="bi bi-plus-circle-fill me-2"></i>Create Your First Course
+            <% end %>
+          <% else %>
+            You are not enrolled in any courses yet.
+          <% end %>
+        </p>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<% content_for :scripts do %>
+  <script>
+    document.addEventListener('turbo:load', function() {
+      // Initialize tooltips
+      const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      tooltipTriggerList.forEach(el => new bootstrap.Tooltip(el))
+
+      // Initialize any existing modals
+      const modalTriggerList = document.querySelectorAll('[data-bs-toggle="modal"]')
+      modalTriggerList.forEach(el => new bootstrap.Modal(el))
+    })
+  </script>
+<% end %>

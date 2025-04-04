@@ -1,0 +1,28 @@
+#!/usr/bin/env ruby
+# Script to test database connection
+
+require 'pg'
+
+begin
+  # Try to connect to the database using TCP/IP
+  conn = PG.connect(
+    dbname: 'ptex_development',
+    user: 'jbarkin28',
+    host: 'localhost'
+  )
+
+  # Execute a simple query
+  result = conn.exec('SELECT 1 as test')
+
+  # Print the result
+  puts "Connection successful!"
+  puts "Query result: #{result[0]['test']}"
+
+  # Close the connection
+  conn.close
+
+  exit 0
+rescue => e
+  puts "Connection failed: #{e.message}"
+  exit 1
+end

@@ -1,0 +1,30 @@
+<div class="container">
+  <div class="row justify-content-center mt-5">
+    <div class="col-md-6 text-center">
+      <div class="error-icon mb-4">
+        <i class="bi bi-<%= local_assigns.fetch(:icon, 'exclamation-circle') %> display-1 text-<%= local_assigns.fetch(:color, 'danger') %>"></i>
+      </div>
+      
+      <h1 class="display-4 mb-4"><%= local_assigns.fetch(:title, 'Error') %></h1>
+      <p class="lead mb-4"><%= local_assigns.fetch(:message, 'An error occurred.') %></p>
+      
+      <% if local_assigns[:details].present? %>
+        <div class="alert alert-light text-start mb-4">
+          <%= local_assigns[:details] %>
+        </div>
+      <% end %>
+      
+      <div class="d-flex justify-content-center gap-3">
+        <%= link_to root_path, class: "btn btn-primary" do %>
+          <i class="bi bi-house-door me-2"></i>Back to Home
+        <% end %>
+        
+        <% if local_assigns[:back_link] %>
+          <%= link_to 'javascript:history.back()', class: "btn btn-outline-secondary" do %>
+            <i class="bi bi-arrow-left me-2"></i>Go Back
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>

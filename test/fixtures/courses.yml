@@ -1,0 +1,28 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+math_101:
+  name: Mathematics 101
+  description: Introduction to basic mathematics
+  user: teacher
+  level: beginner
+
+physics_201:
+  name: Physics 201
+  description: Intermediate physics course
+  user: teacher
+  level: intermediate
+
+math:
+  name: Mathematics
+  teacher: teacher
+  level: Regular
+
+history:
+  name: World History
+  teacher: teacher
+  level: Honors
+
+physics:
+  name: AP Physics
+  teacher: teacher
+  level: AP

@@ -1,0 +1,8 @@
+# Web server with Puma
+web: bundle exec puma -C config/puma.rb -p 3000
+
+# SolidQueue processes
+queue: bundle exec rake solid_queue:start
+
+# Health check monitor
+monitor: bin/solid_queue_monitor

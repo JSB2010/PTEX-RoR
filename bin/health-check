@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Script to check the health of all services
+
+# Function to log messages with timestamps
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Function to check a service
+check_service() {
+  local service_name=$1
+  local check_command=$2
+  
+  log "Checking $service_name..."
+  
+  if eval "$check_command"; then
+    log "✅ $service_name is running."
+    return 0
+  else
+    log "❌ $service_name is NOT running."
+    return 1
+  fi
+}
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.."
+
+# Check PostgreSQL
+check_service "PostgreSQL" "pg_isready -q"
+pg_status=$?
+
+# Check Redis
+check_service "Redis" "redis-cli ping > /dev/null 2>&1"
+redis_status=$?
+
+# Check database connection
+log "Checking database connection..."
+if ./bin/check-db-connection > /dev/null 2>&1; then
+  log "✅ Database connection is working."
+  db_status=0
+else
+  log "❌ Database connection is NOT working."
+  db_status=1
+fi
+
+# Check Rails server
+log "Checking Rails server..."
+if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+  log "✅ Rails server is running."
+  rails_status=0
+else
+  log "❌ Rails server is NOT running."
+  rails_status=1
+fi
+
+# Print summary
+log "=== Health Check Summary ==="
+[ $pg_status -eq 0 ] && echo "✅ PostgreSQL: Running" || echo "❌ PostgreSQL: Not running"
+[ $redis_status -eq 0 ] && echo "✅ Redis: Running" || echo "❌ Redis: Not running"
+[ $db_status -eq 0 ] && echo "✅ Database Connection: Working" || echo "❌ Database Connection: Not working"
+[ $rails_status -eq 0 ] && echo "✅ Rails Server: Running" || echo "❌ Rails Server: Not running"
+
+# Exit with status code based on overall health
+if [ $pg_status -eq 0 ] && [ $redis_status -eq 0 ] && [ $db_status -eq 0 ] && [ $rails_status -eq 0 ]; then
+  log "All services are healthy!"
+  exit 0
+else
+  log "Some services are not healthy. See above for details."
+  exit 1
+fi

@@ -1,0 +1,33 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  course: MyString
+  letter_grade: MyString
+  numeric_grade: 9.99
+  user: one
+
+two:
+  course: MyString
+  letter_grade: MyString
+  numeric_grade: 9.99
+  user: two
+
+math_grade_one:
+  score: 85
+  user: student
+  course: math_101
+
+physics_grade_one:
+  score: 92
+  user: student
+  course: physics_201
+
+math_grade_two:
+  score: 78
+  user: student_two
+  course: math_101
+
+physics_grade_two:
+  score: 88
+  user: student_two
+  course: physics_201

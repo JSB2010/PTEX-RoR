@@ -1,0 +1,37 @@
+.needs-validation .form-control:valid:focus {
+  border-color: #198754;
+  box-shadow: 0 0 0 0.25rem rgba(25, 135, 84, 0.25);
+}
+
+.needs-validation .form-control:invalid:focus {
+  border-color: #dc3545;
+  box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25);
+}
+
+.needs-validation.was-validated .form-floating > .form-control:invalid + label {
+  color: #dc3545;
+}
+
+.needs-validation.was-validated .form-floating > .form-control:valid + label {
+  color: #198754;
+}
+
+.badge.bg-success, .badge.bg-danger {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.form-floating > .form-control:focus ~ label,
+.form-floating > .form-control:not(:placeholder-shown) ~ label {
+  color: #6c757d;
+  opacity: 0.8;
+}
+
+.admin-credentials-form .form-label {
+  color: #495057;
+  margin-bottom: 0.75rem;
+}
+
+.admin-credentials-form .btn-lg {
+  padding: 0.75rem 1.25rem;
+}

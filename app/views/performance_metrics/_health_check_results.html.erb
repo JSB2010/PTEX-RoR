@@ -1,0 +1,165 @@
+<%# Health Check Results Partial %>
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">System Health Status</h5>
+    <%= button_to health_check_performance_metrics_path, 
+                  method: :post,
+                  class: "btn btn-sm btn-outline-primary",
+                  data: { turbo: true } do %>
+      <i class="bi bi-arrow-clockwise me-1"></i>Run Health Check
+    <% end %>
+  </div>
+  
+  <div class="card-body">
+    <% if @health_check_results.present? %>
+      <div class="row g-3">
+        <!-- Server Status -->
+        <div class="col-md-6">
+          <div class="health-status-card p-3 border rounded">
+            <h6>Server Status</h6>
+            <% server_status = @health_check_results[:server_status] %>
+            <div class="d-flex align-items-center mb-2">
+              <% if server_status[:status] == 'success' %>
+                <span class="badge bg-success me-2">Healthy</span>
+              <% else %>
+                <span class="badge bg-danger me-2">Error</span>
+              <% end %>
+              <small class="text-muted"><%= server_status[:message] %></small>
+            </div>
+            <% if server_status[:response_time] %>
+              <small class="text-muted">Response Time: <%= server_status[:response_time] %>s</small>
+            <% end %>
+          </div>
+        </div>
+
+        <!-- Critical Services -->
+        <% if @health_check_results[:service_checks].present? %>
+          <div class="col-md-6">
+            <div class="health-status-card p-3 border rounded">
+              <h6>Critical Services</h6>
+              <div class="list-group list-group-flush">
+                <% @health_check_results[:service_checks].each do |service, check| %>
+                  <div class="list-group-item border-0 px-0">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <span><%= service.to_s.titleize %></span>
+                      <% if check[:status] == 'success' %>
+                        <span class="badge bg-success">OK</span>
+                      <% else %>
+                        <span class="badge bg-danger">Error</span>
+                      <% end %>
+                    </div>
+                    <small class="text-muted d-block"><%= check[:message] %></small>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Database Health -->
+        <% if @health_check_results[:database_checks].present? %>
+          <div class="col-12">
+            <div class="health-status-card p-3 border rounded">
+              <h6>Database Health</h6>
+              <% db = @health_check_results[:database_checks] %>
+              <% if db[:status] == 'success' %>
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <small class="text-muted d-block">Connection Pool</small>
+                    <div class="d-flex align-items-center">
+                      <span class="h6 mb-0 me-2"><%= db[:pool][:active] %>/<%= db[:pool][:size] %></span>
+                      <small class="text-muted">active connections</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <small class="text-muted d-block">Queue Status</small>
+                    <div class="d-flex align-items-center">
+                      <span class="h6 mb-0 me-2"><%= db[:pool][:waiting] %></span>
+                      <small class="text-muted">waiting in queue</small>
+                    </div>
+                  </div>
+                </div>
+              <% else %>
+                <div class="alert alert-danger mb-0">
+                  <%= db[:message] %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Background Jobs -->
+        <% if @health_check_results[:job_checks].present? %>
+          <div class="col-md-12">
+            <div class="health-status-card p-3 border rounded">
+              <h6>Background Jobs</h6>
+              <div class="row g-3">
+                <% @health_check_results[:job_checks].each do |check_type, status| %>
+                  <div class="col-md-4">
+                    <div class="d-flex align-items-center">
+                      <% case status[:status] 
+                         when 'success' %>
+                        <span class="badge bg-success me-2">✓</span>
+                      <% when 'warning' %>
+                        <span class="badge bg-warning me-2">!</span>
+                      <% else %>
+                        <span class="badge bg-danger me-2">×</span>
+                      <% end %>
+                      <div>
+                        <small class="text-muted d-block"><%= check_type.to_s.titleize %></small>
+                        <span><%= status[:message] %></span>
+                      </div>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Log Issues -->
+        <% if @health_check_results[:log_checks]&.any? %>
+          <div class="col-12">
+            <div class="health-status-card p-3 border rounded">
+              <h6>Recent Log Issues</h6>
+              <div class="accordion" id="logIssuesAccordion">
+                <% @health_check_results[:log_checks].each do |type, errors| %>
+                  <div class="accordion-item border-0">
+                    <h2 class="accordion-header">
+                      <button class="accordion-button collapsed p-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapse<%= type %>">
+                        <%= type.to_s.titleize %> Log
+                        <span class="badge bg-warning ms-2"><%= errors.size %> issues</span>
+                      </button>
+                    </h2>
+                    <div id="collapse<%= type %>" class="accordion-collapse collapse">
+                      <div class="accordion-body">
+                        <ul class="list-unstyled mb-0">
+                          <% errors.take(5).each do |error| %>
+                            <li class="text-danger small"><%= error %></li>
+                          <% end %>
+                          <% if errors.size > 5 %>
+                            <li class="text-muted small">...and <%= errors.size - 5 %> more</li>
+                          <% end %>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="text-center py-4">
+        <p class="text-muted mb-3">No health check results available</p>
+        <%= button_to health_check_performance_metrics_path, 
+                      method: :post,
+                      class: "btn btn-primary",
+                      data: { turbo: true } do %>
+          <i class="bi bi-arrow-clockwise me-1"></i>Run Health Check
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>

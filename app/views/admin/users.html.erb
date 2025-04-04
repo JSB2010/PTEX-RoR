@@ -1,0 +1,170 @@
+<%% content_for :page_title do %>
+  User Management
+<%% end %>
+
+<%% content_for :page_actions do %>
+  <%= link_to new_user_registration_path, class: 'btn btn-success' do %>
+    <i class="bi bi-person-plus me-2"></i>Add New User
+  <% end %>
+<%% end %>
+
+<div class="card">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Courses</th>
+            <th>Status</th>
+            <th>Last Login</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%% @users.each do |user| %>
+            <tr>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="flex-shrink-0">
+                    <div class="bg-light rounded-circle p-3">
+                      <i class="bi bi-person fs-4"></i>
+                    </div>
+                  </div>
+                  <div class="flex-grow-1 ms-3">
+                    <div class="fw-bold"><%= user.full_name %></div>
+                    <div class="small text-muted">
+                      <%= user.email %>
+                      <%% if @passwords[user.username].present? %>
+                        <br>
+                        <span class="text-danger">
+                          Default password: <%= @passwords[user.username] %>
+                        </span>
+                      <%% end %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge bg-<%= user.role == 'Teacher' ? 'primary' : 'info' %>">
+                  <%= user.role %>
+                </span>
+              </td>
+              <td>
+                <%% if user.teacher? %>
+                  <div class="small">
+                    <strong><%= user.courses.count %> courses teaching</strong>
+                    <ul class="list-unstyled mb-0 mt-1">
+                      <%% user.courses.limit(3).each do |course| %>
+                        <li>• <%= course.name %></li>
+                      <%% end %>
+                      <%% if user.courses.count > 3 %>
+                        <li class="text-muted">• and <%= user.courses.count - 3 %> more...</li>
+                      <%% end %>
+                    </ul>
+                  </div>
+                <%% else %>
+                  <div class="small">
+                    Enrolled in <%= user.courses.count %> courses
+                    <%% if user.courses.any? %>
+                      <div class="text-muted mt-1">
+                        Latest: <%= user.courses.order(created_at: :desc).first.name %>
+                      </div>
+                    <%% end %>
+                  </div>
+                <%% end %>
+              </td>
+              <td>
+                <%% if user.confirmed? %>
+                  <span class="badge bg-success">Active</span>
+                <%% else %>
+                  <span class="badge bg-warning">Pending</span>
+                <%% end %>
+              </td>
+              <td>
+                <%% if user.current_sign_in_at %>
+                  <div class="small">
+                    <%= time_ago_in_words(user.current_sign_in_at) %> ago
+                    <div class="text-muted">
+                      from <%= user.current_sign_in_ip || 'unknown' %>
+                    </div>
+                  </div>
+                <%% else %>
+                  <span class="text-muted">Never</span>
+                <%% end %>
+              </td>
+              <td>
+                <div class="btn-group">
+                  <%= link_to edit_user_registration_path(user), class: 'btn btn-sm btn-outline-primary' do %>
+                    <i class="bi bi-pencil"></i>
+                  <% end %>
+                  
+                  <%% if user.access_locked? %>
+                    <%= button_to unlock_user_path(user), method: :post, class: 'btn btn-sm btn-outline-success',
+                        data: { turbo_confirm: 'Are you sure you want to unlock this account?' } do %>
+                      <i class="bi bi-unlock"></i>
+                    <% end %>
+                  <%% else %>
+                    <%= button_to lock_user_path(user), method: :post, class: 'btn btn-sm btn-outline-warning',
+                        data: { turbo_confirm: 'Are you sure you want to lock this account?' } do %>
+                      <i class="bi bi-lock"></i>
+                    <% end %>
+                  <%% end %>
+                  
+                  <%= button_to user_registration_path(user), method: :delete,
+                      class: 'btn btn-sm btn-outline-danger',
+                      data: { turbo_confirm: 'Are you sure? This will remove the user and all associated data.' } do %>
+                    <i class="bi bi-trash"></i>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <%% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%# User Statistics Modal %>
+<div class="modal fade" id="userStatsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">User Statistics</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Role Distribution</h6>
+              <div class="d-flex justify-content-between">
+                <span>Teachers</span>
+                <strong><%= @teachers.count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Students</span>
+                <strong><%= @students.count %></strong>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Activity</h6>
+              <div class="d-flex justify-content-between">
+                <span>Active Today</span>
+                <strong><%= @users.where('current_sign_in_at > ?', 1.day.ago).count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Active This Week</span>
+                <strong><%= @users.where('current_sign_in_at > ?', 1.week.ago).count %></strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

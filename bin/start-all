@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Script to start all services
+
+# Function to log messages with timestamps
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.."
+APP_ROOT=$(pwd)
+
+log "Starting all services..."
+
+# Start PostgreSQL if not running
+log "Checking PostgreSQL..."
+if ! pg_isready -q; then
+  log "Starting PostgreSQL..."
+  brew services start postgresql@14
+  sleep 5
+  
+  if ! pg_isready -q; then
+    log "ERROR: Failed to start PostgreSQL."
+    exit 1
+  fi
+  
+  log "PostgreSQL started successfully."
+else
+  log "PostgreSQL is already running."
+fi
+
+# Start Redis if not running
+log "Checking Redis..."
+if ! redis-cli ping > /dev/null 2>&1; then
+  log "Starting Redis..."
+  brew services start redis
+  sleep 3
+  
+  if ! redis-cli ping > /dev/null 2>&1; then
+    log "ERROR: Failed to start Redis."
+    exit 1
+  fi
+  
+  log "Redis started successfully."
+else
+  log "Redis is already running."
+fi
+
+# Initialize database if needed
+log "Initializing database..."
+if ! "$APP_ROOT/bin/db-init"; then
+  log "ERROR: Database initialization failed."
+  exit 1
+fi
+
+log "All services started successfully!"
+log "You can now run 'bin/rails server' to start the Rails server."
+exit 0

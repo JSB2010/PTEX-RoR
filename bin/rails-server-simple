@@ -1,0 +1,82 @@
+#!/usr/bin/env ruby
+# A simple script to start the Rails server with all components
+
+require 'fileutils'
+require 'socket'
+
+# Set up paths
+APP_ROOT = File.expand_path('..', __dir__)
+PID_DIR = File.join(APP_ROOT, 'tmp', 'pids')
+LOG_DIR = File.join(APP_ROOT, 'log')
+
+# Create directories if they don't exist
+FileUtils.mkdir_p(PID_DIR)
+FileUtils.mkdir_p(LOG_DIR)
+
+# Helper method to log messages
+def log(message)
+  puts "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S')}] #{message}"
+end
+
+# Helper method to run a command
+def run_command(command)
+  log "Running: #{command}"
+  system(command)
+end
+
+# Check if PostgreSQL is running
+log "Checking PostgreSQL status..."
+pg_running = system("pg_isready -q")
+unless pg_running
+  log "Starting PostgreSQL..."
+  run_command("brew services start postgresql@14")
+  sleep 5
+
+  # Check again
+  pg_running = system("pg_isready -q")
+  unless pg_running
+    log "ERROR: Failed to start PostgreSQL. Please start it manually."
+    exit 1
+  end
+
+  log "PostgreSQL started successfully."
+else
+  log "PostgreSQL is already running."
+end
+
+# Check if Redis is running
+log "Checking Redis status..."
+redis_running = system("redis-cli ping > /dev/null 2>&1")
+unless redis_running
+  log "Starting Redis..."
+  run_command("brew services start redis")
+  sleep 3
+
+  # Check again
+  redis_running = system("redis-cli ping > /dev/null 2>&1")
+  unless redis_running
+    log "ERROR: Failed to start Redis. Please start it manually."
+    exit 1
+  end
+
+  log "Redis started successfully."
+else
+  log "Redis is already running."
+end
+
+# Set environment variable to use inline adapter for ActiveJob
+ENV['ACTIVE_JOB_ADAPTER'] = 'inline'
+
+# Clean up any stale PID files
+log "Cleaning up stale PID files..."
+Dir.glob(File.join(PID_DIR, "*.pid")).each do |file|
+  begin
+    File.delete(file)
+  rescue => e
+    log "Error deleting PID file #{file}: #{e.message}"
+  end
+end
+
+# Start the Rails server
+log "Starting Rails server..."
+exec("cd #{APP_ROOT} && bundle exec rails server #{ARGV.join(' ')}")

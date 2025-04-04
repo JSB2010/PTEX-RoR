@@ -1,0 +1,209 @@
+<%# Performance Metrics Dashboard %>
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Performance Metrics</h1>
+    <%= link_to 'Run Health Check', health_check_performance_metrics_path, 
+        method: :post, 
+        class: 'btn btn-primary',
+        data: { turbo_method: :post } %>
+  </div>
+
+  <%= render 'performance_alerts' %>
+
+  <div data-controller="metrics-dashboard">
+    <%= render 'monitoring_dashboard' %>
+  </div>
+
+  <% if @health_check_results&.any? %>
+    <div class="mt-4">
+      <h2 class="h4 mb-3">System Health Check Results</h2>
+      <div class="row g-4">
+        <% @health_check_results.each do |check| %>
+          <div class="col-md-4">
+            <div class="card shadow-sm h-100">
+              <div class="card-body">
+                <h5 class="card-title d-flex justify-content-between align-items-center">
+                  <%= check[:name] %>
+                  <span class="badge <%= check[:status] == 'ok' ? 'bg-success' : 'bg-danger' %>">
+                    <%= check[:status].upcase %>
+                  </span>
+                </h5>
+                <p class="card-text text-muted mb-0">
+                  <%= check[:message] %>
+                </p>
+              </div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<% content_for :styles do %>
+  <%= yield :monitoring_dashboard_styles %>
+<% end %>
+
+<% content_for :javascript do %>
+  <%= yield :monitoring_dashboard_javascript %>
+<% end %>
+
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <h2 class="mb-4">Performance Metrics</h2>
+      
+      <%= render 'health_check_results' %>
+      
+      <div class="row g-4">
+        <!-- Cache Performance -->
+        <div class="col-md-6">
+          <div class="card shadow-sm">
+            <div class="card-header">
+              <h5 class="mb-0">Cache Performance</h5>
+            </div>
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <span>Cache Hit Rate</span>
+                <h3 class="mb-0"><%= @metrics[:cache_hits][:rate] %>%</h3>
+              </div>
+              <div class="row text-center">
+                <div class="col">
+                  <small class="text-muted d-block">Hits</small>
+                  <span class="h5"><%= @metrics[:cache_hits][:hits] %></span>
+                </div>
+                <div class="col">
+                  <small class="text-muted d-block">Misses</small>
+                  <span class="h5"><%= @metrics[:cache_hits][:misses] %></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Error Rates -->
+        <div class="col-md-6">
+          <div class="card shadow-sm">
+            <div class="card-header">
+              <h5 class="mb-0">Error Rates</h5>
+            </div>
+            <div class="card-body">
+              <% if @metrics[:error_rates].any? %>
+                <div class="list-group list-group-flush">
+                  <% @metrics[:error_rates].each do |type, count| %>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                      <span><%= type.titleize %></span>
+                      <span class="badge bg-danger"><%= count %></span>
+                    </div>
+                  <% end %>
+                </div>
+              <% else %>
+                <p class="text-success mb-0">No errors reported</p>
+              <% end %>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Calculation Times -->
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header">
+              <h5 class="mb-0">Recent Calculations</h5>
+            </div>
+            <div class="card-body">
+              <% if @metrics[:calculation_times].any? %>
+                <div class="table-responsive">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Type</th>
+                        <th>Time (ms)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% @metrics[:calculation_times].each do |calc| %>
+                        <tr>
+                          <td><%= calc[:calculation_type] %></td>
+                          <td><%= number_with_precision(calc[:time], precision: 2) %></td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              <% else %>
+                <p class="text-muted mb-0">No recent calculations</p>
+              <% end %>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Course Statistics -->
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header">
+              <h5 class="mb-0">Course Performance</h5>
+            </div>
+            <div class="card-body">
+              <% if @course_statistics.any? %>
+                <div class="table-responsive">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Course</th>
+                        <th>Avg. Calculation Time (ms)</th>
+                        <th>Cache Hit Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% @course_statistics.each do |stat| %>
+                        <tr>
+                          <td><%= stat[:name] %></td>
+                          <td><%= number_with_precision(stat[:calculation_time], precision: 2) %></td>
+                          <td>
+                            <div class="d-flex align-items-center">
+                              <div class="progress flex-grow-1" style="height: 6px;">
+                                <div class="progress-bar" role="progressbar" style="width: <%= stat[:cache_hit_rate] %>%"></div>
+                              </div>
+                              <span class="ms-2"><%= number_to_percentage(stat[:cache_hit_rate], precision: 1) %></span>
+                            </div>
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              <% else %>
+                <p class="text-muted mb-0">No course statistics available</p>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<% content_for :styles do %>
+  <style>
+    .health-status-card {
+      background-color: var(--bs-light);
+    }
+    .progress {
+      background-color: rgba(0,0,0,.05);
+    }
+    .progress-bar {
+      background-color: var(--bs-primary);
+    }
+  </style>
+<% end %>
+
+<% content_for :scripts do %>
+  <script>
+    document.addEventListener('turbo:load', function() {
+      // Refresh the page every 5 minutes
+      setTimeout(function() {
+        Turbo.visit(window.location.href)
+      }, 300000)
+    })
+  </script>
+<% end %>

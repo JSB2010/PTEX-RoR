@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+# Script to check database connection
+
+require_relative '../config/environment'
+
+begin
+  # Try to connect to the database
+  ActiveRecord::Base.connection.execute('SELECT 1')
+  puts "✅ Database connection successful"
+  exit 0
+rescue => e
+  puts "❌ Database connection error: #{e.message}"
+  
+  # Check if PostgreSQL is running
+  pg_running = system("pg_isready -q")
+  if !pg_running
+    puts "PostgreSQL is not running. Try starting it with: brew services start postgresql@14"
+  else
+    puts "PostgreSQL is running, but Rails can't connect to it."
+    puts "Check your database.yml configuration and ensure the database exists."
+  end
+  
+  exit 1
+end

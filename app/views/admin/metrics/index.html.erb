@@ -1,0 +1,376 @@
+<%# Admin System Metrics Dashboard %>
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">System Metrics</h1>
+    <%= button_to admin_metrics_health_check_path, 
+        method: :post,
+        class: 'btn btn-primary',
+        data: { turbo: true } do %>
+      <i class="bi bi-arrow-clockwise me-1"></i>Run Health Check
+    <% end %>
+  </div>
+
+  <div class="row g-4">
+    <!-- System Overview -->
+    <div class="col-md-6 col-xl-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">System Health</h6>
+          <ul class="list-unstyled mb-0">
+            <li class="mb-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">CPU Usage</small>
+                <div class="progress flex-grow-1 mx-2" style="height: 6px;">
+                  <div class="progress-bar <%= @system_metrics[:cpu_usage] > 80 ? 'bg-danger' : 'bg-success' %>" 
+                       style="width: <%= @system_metrics[:cpu_usage] %>%">
+                  </div>
+                </div>
+                <span class="badge <%= @system_metrics[:cpu_usage] > 80 ? 'bg-danger' : 'bg-success' %>">
+                  <%= number_to_percentage(@system_metrics[:cpu_usage], precision: 1) %>
+                </span>
+              </div>
+            </li>
+            <li class="mb-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">Memory</small>
+                <span class="fw-medium"><%= number_to_human_size(@system_metrics[:memory_usage] * 1024) %></span>
+              </div>
+            </li>
+            <li class="mb-3">
+              <small class="text-muted d-block">Load Average</small>
+              <div class="d-flex gap-2">
+                <% @system_metrics[:load_averages].each_with_index do |load, i| %>
+                  <span class="badge <%= load.to_f > 5 ? 'bg-danger' : 'bg-success' %>">
+                    <%= number_with_precision(load.to_f, precision: 2) %>
+                  </span>
+                <% end %>
+              </div>
+            </li>
+            <li>
+              <small class="text-muted d-block">Uptime</small>
+              <span class="fw-medium"><%= @system_metrics[:server_uptime] %></span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Database Health -->
+    <div class="col-md-6 col-xl-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Database Health</h6>
+          <div class="mb-3">
+            <small class="text-muted d-block">Connection Pool</small>
+            <div class="d-flex align-items-center">
+              <div class="progress flex-grow-1" style="height: 6px;">
+                <div class="progress-bar <%= @database_metrics[:active_connections].to_f / @database_metrics[:pool_size] > 0.8 ? 'bg-warning' : 'bg-success' %>" 
+                     style="width: <%= (@database_metrics[:active_connections].to_f / @database_metrics[:pool_size] * 100).round %>%">
+                </div>
+              </div>
+              <span class="ms-2 small">
+                <%= @database_metrics[:active_connections] %>/<%= @database_metrics[:pool_size] %>
+              </span>
+            </div>
+          </div>
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <small class="text-muted">Active Sessions</small>
+                <span class="badge <%= @performance_metrics[:active_sessions] > @database_metrics[:pool_size] / 2 ? 'bg-warning' : 'bg-success' %>">
+                  <%= @performance_metrics[:active_sessions] %>
+                </span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <small class="text-muted">Deadlocks</small>
+                <span class="badge <%= @database_metrics[:deadlocks] > 0 ? 'bg-danger' : 'bg-success' %>">
+                  <%= @database_metrics[:deadlocks] %>
+                </span>
+              </div>
+            </li>
+            <li>
+              <small class="text-muted d-block">Database Size</small>
+              <span class="fw-medium"><%= @database_metrics[:db_size] %></span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Redis Health -->
+    <div class="col-md-6 col-xl-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Redis Health</h6>
+          <ul class="list-unstyled mb-0">
+            <li class="mb-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">Hit Rate</small>
+                <div class="progress flex-grow-1 mx-2" style="height: 6px;">
+                  <div class="progress-bar <%= @redis_metrics[:hit_rate] < 80 ? 'bg-warning' : 'bg-success' %>" 
+                       style="width: <%= @redis_metrics[:hit_rate] %>%">
+                  </div>
+                </div>
+                <span class="badge <%= @redis_metrics[:hit_rate] < 80 ? 'bg-warning' : 'bg-success' %>">
+                  <%= number_to_percentage(@redis_metrics[:hit_rate], precision: 1) %>
+                </span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <small class="text-muted">Memory</small>
+                <span class="fw-medium"><%= @redis_metrics[:used_memory_human] %></span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <small class="text-muted">Ops/sec</small>
+                <span class="fw-medium"><%= number_with_delimiter(@redis_metrics[:ops_per_second]) %></span>
+              </div>
+            </li>
+            <li>
+              <div class="d-flex justify-content-between">
+                <small class="text-muted">Blocked Clients</small>
+                <span class="badge <%= @redis_metrics[:blocked_clients] > 0 ? 'bg-danger' : 'bg-success' %>">
+                  <%= @redis_metrics[:blocked_clients] %>
+                </span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Background Jobs -->
+    <div class="col-md-6 col-xl-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Background Jobs</h6>
+          <ul class="list-unstyled mb-0">
+            <li class="mb-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">Success Rate</small>
+                <div class="progress flex-grow-1 mx-2" style="height: 6px;">
+                  <div class="progress-bar <%= @job_metrics[:completion_rate] < 95 ? 'bg-warning' : 'bg-success' %>" 
+                       style="width: <%= @job_metrics[:completion_rate] %>%">
+                  </div>
+                </div>
+                <span class="badge <%= @job_metrics[:completion_rate] < 95 ? 'bg-warning' : 'bg-success' %>">
+                  <%= number_to_percentage(@job_metrics[:completion_rate], precision: 1) %>
+                </span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <small class="text-muted">Queue Latency</small>
+                <span class="badge <%= @job_metrics[:queue_latency] > 30 ? 'bg-warning' : 'bg-success' %>">
+                  <%= number_with_precision(@job_metrics[:queue_latency], precision: 1) %>s
+                </span>
+              </div>
+            </li>
+            <li class="mb-2">
+              <div class="d-flex justify-content-between">
+                <small class="text-muted">Failed</small>
+                <span class="badge bg-danger"><%= @job_metrics[:failed] %></span>
+              </div>
+            </li>
+            <li>
+              <div class="d-flex justify-content-between">
+                <small class="text-muted">Active Workers</small>
+                <span class="fw-medium"><%= @job_metrics[:active_processes] %></span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Metrics -->
+  <div class="row mt-4">
+    <!-- Slow Queries -->
+    <div class="col-12">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Slow Queries</h5>
+        </div>
+        <div class="card-body">
+          <% if @database_metrics[:slow_queries].any? %>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Query</th>
+                    <th>Calls</th>
+                    <th>Total Time (ms)</th>
+                    <th>Average Time (ms)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @database_metrics[:slow_queries].each do |query| %>
+                    <tr>
+                      <td><code class="small"><%= truncate(query['query'], length: 100) %></code></td>
+                      <td><%= number_with_delimiter(query['calls']) %></td>
+                      <td><%= number_with_precision(query['total_time'], precision: 1) %></td>
+                      <td><%= number_with_precision(query['mean_time'], precision: 1) %></td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <p class="text-muted mb-0">No slow queries detected</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Disk Usage -->
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Disk Usage</h5>
+        </div>
+        <div class="card-body">
+          <% if @system_metrics[:disk_usage].any? %>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Filesystem</th>
+                    <th>Size</th>
+                    <th>Used</th>
+                    <th>Available</th>
+                    <th>Usage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @system_metrics[:disk_usage].each do |disk| %>
+                    <tr>
+                      <td><%= disk[:filesystem] %></td>
+                      <td><%= disk[:size] %></td>
+                      <td><%= disk[:used] %></td>
+                      <td><%= disk[:available] %></td>
+                      <td>
+                        <div class="d-flex align-items-center">
+                          <div class="progress flex-grow-1" style="height: 6px;">
+                            <div class="progress-bar <%= disk[:usage_percent].to_i > 85 ? 'bg-danger' : 'bg-success' %>"
+                                 style="width: <%= disk[:usage_percent] %>">
+                            </div>
+                          </div>
+                          <span class="ms-2 small"><%= disk[:usage_percent] %></span>
+                        </div>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <p class="text-muted mb-0">Disk usage information not available</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Network Stats -->
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="mb-0">Network Statistics</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-6">
+              <div class="border rounded p-3 text-center">
+                <h3 class="mb-1"><%= number_with_delimiter(@system_metrics[:network_stats][:connections]) %></h3>
+                <small class="text-muted">Active Connections</small>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="border rounded p-3 text-center">
+                <h3 class="mb-1"><%= number_with_delimiter(@system_metrics[:network_stats][:listening_ports]) %></h3>
+                <small class="text-muted">Listening Ports</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table Bloat -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Database Table Bloat</h5>
+        </div>
+        <div class="card-body">
+          <% if @database_metrics[:table_bloat].any? %>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Schema</th>
+                    <th>Table</th>
+                    <th>Bloat Factor</th>
+                    <th>Wasted Space</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @database_metrics[:table_bloat].each do |table| %>
+                    <tr>
+                      <td><%= table['schemaname'] %></td>
+                      <td><%= table['tablename'] %></td>
+                      <td>
+                        <span class="badge <%= table['bloat'].to_f > 3 ? 'bg-danger' : 'bg-warning' %>">
+                          <%= number_with_precision(table['bloat'], precision: 1) %>x
+                        </span>
+                      </td>
+                      <td><%= table['waste'] %></td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <p class="text-muted mb-0">No significant table bloat detected</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<% content_for :styles do %>
+  <style>
+    .progress {
+      background-color: rgba(0,0,0,.05);
+    }
+    .card {
+      box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
+    }
+    code {
+      white-space: nowrap;
+      max-width: 100%;
+      display: inline-block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .table > :not(caption) > * > * {
+      padding: 0.75rem;
+    }
+  </style>
+<% end %>
+
+<% content_for :javascript do %>
+  <script>
+    // Refresh the page every 60 seconds
+    document.addEventListener('turbo:load', function() {
+      setTimeout(function() {
+        Turbo.visit(window.location.href)
+      }, 60000)
+    })
+  </script>
+<% end %>

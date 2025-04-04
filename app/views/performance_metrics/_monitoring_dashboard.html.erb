@@ -1,0 +1,151 @@
+<%# Course Performance Monitoring Dashboard %>
+<div class="monitoring-dashboard">
+  <div class="row g-4">
+    <!-- Calculation Time Overview -->
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Calculation Performance</h5>
+          <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-time-range="hour">1h</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary active" data-time-range="day">24h</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-time-range="week">7d</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="calculation-metrics">
+            <% @course_statistics.each do |stat| %>
+              <div class="metric-row mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="course-name"><%= stat[:name] %></span>
+                  <span class="calculation-time">
+                    <%= number_with_precision(stat[:calculation_time], precision: 2) %> ms
+                    <% if stat[:calculation_time] > 1000 %>
+                      <span class="badge bg-warning">Slow</span>
+                    <% end %>
+                  </span>
+                </div>
+                <div class="progress" style="height: 4px;">
+                  <div class="progress-bar <%= cache_performance_class(stat[:cache_hit_rate]) %>"
+                       role="progressbar"
+                       style="width: <%= stat[:cache_hit_rate] %>%"
+                       aria-valuenow="<%= stat[:cache_hit_rate] %>"
+                       aria-valuemin="0"
+                       aria-valuemax="100">
+                  </div>
+                </div>
+                <small class="text-muted">
+                  Cache Hit Rate: <%= number_to_percentage(stat[:cache_hit_rate], precision: 1) %>
+                </small>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cache Performance -->
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header">
+          <h5 class="mb-0">Cache Performance</h5>
+        </div>
+        <div class="card-body">
+          <div class="metric-group mb-4">
+            <h6 class="text-muted">Overall Hit Rate</h6>
+            <div class="d-flex align-items-center">
+              <h2 class="mb-0 me-2"><%= number_to_percentage(@cache_metrics[:rate], precision: 1) %></h2>
+              <div class="metric-trend">
+                <% if @cache_metrics[:rate] >= 80 %>
+                  <span class="badge bg-success">Excellent</span>
+                <% elsif @cache_metrics[:rate] >= 60 %>
+                  <span class="badge bg-info">Good</span>
+                <% elsif @cache_metrics[:rate] >= 40 %>
+                  <span class="badge bg-warning">Fair</span>
+                <% else %>
+                  <span class="badge bg-danger">Poor</span>
+                <% end %>
+              </div>
+            </div>
+          </div>
+
+          <div class="row text-center">
+            <div class="col">
+              <div class="metric-box p-3 rounded bg-light">
+                <small class="text-muted d-block">Cache Hits</small>
+                <span class="h4 mb-0"><%= number_with_delimiter(@cache_metrics[:hits]) %></span>
+              </div>
+            </div>
+            <div class="col">
+              <div class="metric-box p-3 rounded bg-light">
+                <small class="text-muted d-block">Cache Misses</small>
+                <span class="h4 mb-0"><%= number_with_delimiter(@cache_metrics[:misses]) %></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Overview -->
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header">
+          <h5 class="mb-0">Error Overview</h5>
+        </div>
+        <div class="card-body">
+          <% if @error_rates.any? %>
+            <div class="list-group list-group-flush">
+              <% @error_rates.each do |type, count| %>
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                  <span><%= format_error_type(type) %></span>
+                  <span class="badge bg-danger rounded-pill"><%= count %></span>
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+            <p class="text-success mb-0">
+              <i class="bi bi-check-circle me-2"></i>
+              No errors reported
+            </p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<% content_for :styles do %>
+  <style>
+    .monitoring-dashboard .progress {
+      background-color: rgba(0,0,0,.05);
+    }
+    .monitoring-dashboard .metric-box {
+      transition: transform 0.2s;
+    }
+    .monitoring-dashboard .metric-box:hover {
+      transform: translateY(-2px);
+    }
+    .monitoring-dashboard .calculation-metrics .metric-row:last-child {
+      margin-bottom: 0 !important;
+    }
+  </style>
+<% end %>
+
+<% content_for :javascript do %>
+  <script>
+    document.addEventListener('turbo:load', () => {
+      const timeRangeButtons = document.querySelectorAll('[data-time-range]');
+      timeRangeButtons.forEach(button => {
+        button.addEventListener('click', (e) => {
+          timeRangeButtons.forEach(b => b.classList.remove('active'));
+          e.target.classList.add('active');
+          
+          // Trigger metrics refresh with new time range
+          const range = e.target.dataset.timeRange;
+          window.refreshMetrics(range);
+        });
+      });
+    });
+  </script>
+<% end %>

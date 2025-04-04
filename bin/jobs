@@ -1,0 +1,47 @@
+#!/usr/bin/env ruby
+require_relative "../config/environment"
+
+class JobsCLI
+  def self.start(args)
+    command = args.shift || "help"
+
+    case command
+    when "work"
+      supervisor = SolidQueue::Supervisor.new(
+        processes: [{
+          name: "worker",
+          queues: ENV.fetch("SOLID_QUEUE_QUEUES", "default").split(","),
+          polling_interval: ENV.fetch("SOLID_QUEUE_POLLING_INTERVAL", "0.1").to_f,
+          threads: ENV.fetch("SOLID_QUEUE_CONCURRENCY", "5").to_i
+        }]
+      )
+      supervisor.start
+    when "status"
+      show_status
+    else
+      puts "Usage: bin/jobs [command]"
+      puts "Commands:"
+      puts "  work   - Start processing jobs"
+      puts "  status - Show job queue status"
+    end
+  end
+
+  def self.show_status
+    processes = SolidQueue::Process.all
+    puts "\nSolidQueue Status:"
+    puts "==================="
+    puts "Active Processes: #{processes.active.count}"
+    puts "Total Jobs: #{SolidQueue::Job.count}"
+    puts "Ready Jobs: #{SolidQueue::Job.ready.count}"
+    puts "Running Jobs: #{SolidQueue::Job.claimed.count}"
+    puts "Failed Jobs: #{SolidQueue::Job.joins(:failed_execution).count}"
+    puts "Scheduled Jobs: #{SolidQueue::Job.scheduled.count}"
+    puts "\nProcess Details:"
+    processes.each do |process|
+      status = process.alive? ? "ALIVE" : "DEAD"
+      puts "#{process.name} (#{process.kind}) - PID: #{process.pid} - Status: #{status}"
+    end
+  end
+end
+
+JobsCLI.start(ARGV)

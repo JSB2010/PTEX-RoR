@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require File.expand_path('../config/environment', __dir__)
+
+# Parse command line arguments
+command = ARGV[0] || 'start'
+
+case command
+when 'start'
+  # Start our direct worker in the background using nohup
+  pid_file = Rails.root.join('tmp', 'pids', 'solid_queue.pid')
+  log_file = Rails.root.join('log', 'solid_queue_direct.log')
+  
+  puts "Starting SolidQueue direct worker..."
+  system("cd #{Rails.root} && nohup bin/direct_solid_queue_worker > #{log_file} 2>&1 &")
+  
+  # Store PID if possible
+  sleep 1 # Give the process a moment to start
+  pid = `pgrep -f "ruby.*direct_solid_queue_worker"`.strip.split("\n").first
+  if pid.present?
+    File.write(pid_file, pid)
+    puts "SolidQueue direct worker started with PID: #{pid}"
+  else
+    puts "SolidQueue direct worker started (PID unknown)"
+  end
+  puts "Check #{log_file} for progress"
+
+when 'stop'
+  # Find and kill any running direct worker processes
+  pid_file = Rails.root.join('tmp', 'pids', 'solid_queue.pid')
+  
+  if File.exist?(pid_file)
+    pid = File.read(pid_file).strip
+    if pid.present?
+      puts "Stopping SolidQueue direct worker (PID: #{pid})..."
+      system("kill -TERM #{pid} 2>/dev/null")
+    end
+    File.delete(pid_file) if File.exist?(pid_file)
+  end
+  
+  # Try to find by process name as fallback
+  other_pids = `pgrep -f "ruby.*direct_solid_queue_worker"`.strip.split("\n")
+  if other_pids.any?
+    puts "Stopping #{other_pids.size} additional worker processes..."
+    other_pids.each do |other_pid|
+      system("kill -TERM #{other_pid} 2>/dev/null")
+    end
+  end
+  
+  # Clean up registered processes in the database
+  SolidQueue::Process.where(hostname: Socket.gethostname).find_each do |process|
+    process.deregister
+    puts "Deregistered process: #{process.name}"
+  end
+  
+  puts "SolidQueue stopped successfully"
+
+when 'restart'
+  # Stop all processes
+  system("#{Rails.root.join('bin', 'solid_queue')} stop")
+  sleep 2  # Give time for processes to shut down
+  # Start again
+  exec("#{Rails.root.join('bin', 'solid_queue')} start")
+
+when 'status'
+  # Use the separate status script
+  exec("#{Rails.root.join('bin')}/solid_queue_status")
+
+else
+  puts "Unknown command: #{command}"
+  puts "Usage: bin/solid_queue [start|stop|restart|status]"
+  exit 1
+end

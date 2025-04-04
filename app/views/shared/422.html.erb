@@ -1,0 +1,9 @@
+<%=
+  render "shared/error_page",
+         title: "Unprocessable Entity",
+         message: "The change you requested could not be processed.",
+         icon: "x-circle",
+         color: "warning",
+         back_link: true,
+         details: Rails.env.development? ? exception&.record&.errors&.full_messages&.to_sentence : nil
+%>

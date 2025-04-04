@@ -1,0 +1,36 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  # Connection pool settings
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 2 } %>
+  checkout_timeout: 5
+  reaping_frequency: 10
+  idle_timeout: 30
+  # Disable prepared statements to reduce connection overhead
+  prepared_statements: false
+  # Configure timeouts for queries
+  variables:
+    statement_timeout: <%= ENV.fetch("STATEMENT_TIMEOUT", 300000) %>  # 5 minutes
+    lock_timeout: <%= ENV.fetch("LOCK_TIMEOUT", 10000) %>  # 10 seconds
+
+development:
+  <<: *default
+  database: ptex_development
+  username: <%= ENV['DATABASE_USERNAME'] %>
+  password: <%= ENV['DATABASE_PASSWORD'] %>
+  # Use localhost for TCP/IP connection
+  host: localhost
+
+test:
+  <<: *default
+  database: ptex_test
+  username: <%= ENV['DATABASE_USERNAME'] %>
+  password: <%= ENV['DATABASE_PASSWORD'] %>
+  host: <%= ENV['DATABASE_HOST'] %>
+
+production:
+  <<: *default
+  database: ptex_production
+  username: <%= ENV['DATABASE_USERNAME'] %>
+  password: <%= ENV['DATABASE_PASSWORD'] %>
+  host: <%= ENV['DATABASE_HOST'] %>

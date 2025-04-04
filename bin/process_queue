@@ -1,0 +1,50 @@
+#!/usr/bin/env ruby
+# bin/process_queue - Process any pending SolidQueue jobs
+
+require_relative '../config/environment'
+
+# Get all ready executions
+ready_jobs = SolidQueue::ReadyExecution.all.to_a
+puts "Found #{ready_jobs.size} jobs in ready state"
+
+if ready_jobs.any?
+  ready_jobs.each do |execution|
+    begin
+      job = execution.job
+      
+      puts "Processing job #{job.id}: #{job.class_name}"
+      
+      # For ActiveJob jobs
+      if job.active_job_id.present?
+        serialized_job = JSON.parse(job.arguments)
+        job_class = job.class_name.constantize
+        
+        puts "Executing ActiveJob: #{job_class}"
+        job_class.perform_now(*serialized_job['arguments']) 
+      else
+        # For direct SolidQueue jobs
+        klass = job.class_name.constantize
+        args = JSON.parse(job.arguments) rescue []
+        
+        if job.method_name.present?
+          klass.send(job.method_name, *args)
+        else
+          klass.new.perform(*args)
+        end
+      end
+      
+      # Mark as completed
+      job.update!(finished_at: Time.current)
+      execution.destroy
+      
+      puts "Successfully processed job #{job.id}"
+    rescue => e
+      puts "Error processing job #{job.id}: #{e.class} - #{e.message}"
+      puts e.backtrace.join("\n")
+    end
+  end
+  
+  puts "Completed processing ready jobs"
+else
+  puts "No jobs to process"
+end

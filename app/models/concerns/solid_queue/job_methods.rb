@@ -1,0 +1,2 @@
+module SolidQueue
+end

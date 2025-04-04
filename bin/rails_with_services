@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'fileutils'
+
+# Ensure PID directory exists
+FileUtils.mkdir_p(File.expand_path('../tmp/pids', __dir__))
+
+# Clean up any stale processes and PID files
+pid_dir = File.expand_path('../tmp/pids', __dir__)
+Dir.glob("#{pid_dir}/*.{pid,lock}").each { |f| File.delete(f) }
+system("pkill -f 'solid_queue_(worker|dispatcher|monitor)'")
+
+# Start the Rails server
+exec "bundle exec rails server $*"

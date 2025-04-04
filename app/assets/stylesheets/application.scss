@@ -1,0 +1,645 @@
+/*
+ * This is a manifest file that'll be compiled into application.css, which will include all the files
+ * listed below.
+ *
+ *= require_self
+ */
+// First import Bootstrap
+@import 'bootstrap';
+
+// Custom variables
+$primary: #4f46e5;
+$secondary: #6b7280;
+$success: #10b981;
+$info: #3b82f6;
+$warning: #f59e0b;
+$danger: #ef4444;
+$light: #f3f4f6;
+$dark: #111827;
+
+$border-radius: 0.5rem;
+$border-radius-sm: 0.375rem;
+$border-radius-lg: 0.75rem;
+$box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+$box-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+$box-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+
+// Import Bootstrap
+@import "bootstrap";
+
+// Global styles
+body {
+  background-color: #f8fafc;
+  color: $dark;
+  font-family: 'Inter', sans-serif;
+}
+
+// Navbar customization
+.navbar {
+  backdrop-filter: blur(8px);
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  
+  .navbar-brand {
+    font-weight: 600;
+    color: $primary;
+  }
+  
+  .nav-link {
+    color: $dark;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: $border-radius;
+    margin: 0 0.25rem;
+    
+    &:hover {
+      background-color: $light;
+      color: $primary;
+    }
+    
+    &.active {
+      background-color: rgba($primary, 0.1);
+      color: $primary;
+    }
+  }
+}
+
+// Card enhancements
+.card {
+  border: none;
+  box-shadow: $box-shadow;
+  transition: transform 0.2s, box-shadow 0.2s;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: $box-shadow-lg;
+    
+    .card-title {
+      color: $primary;
+    }
+  }
+  
+  .card-header {
+    background-color: transparent;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 1.25rem 1.5rem;
+  }
+  
+  .card-body {
+    padding: 1.5rem;
+  }
+}
+
+// Button improvements
+.btn {
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: $border-radius;
+  transition: all 0.2s;
+  
+  &:hover {
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(1px);
+  }
+  
+  &.btn-primary {
+    box-shadow: 0 1px 3px rgba($primary, 0.3);
+  }
+  
+  &.btn-success {
+    box-shadow: 0 1px 3px rgba($success, 0.3);
+  }
+  
+  &.btn-danger {
+    box-shadow: 0 1px 3px rgba($danger, 0.3);
+  }
+  
+  &.loading {
+    pointer-events: none;
+    position: relative;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1rem;
+      height: 1rem;
+      margin: -0.5rem 0 0 -0.5rem;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+  }
+}
+
+// Table improvements
+.table {
+  thead {
+    background-color: $light;
+    
+    th {
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      padding: 1rem;
+      border-bottom: none;
+    }
+  }
+  
+  tbody {
+    tr {
+      transition: all 0.2s ease;
+      
+      &:hover {
+        background-color: rgba($primary, 0.02);
+        transform: translateX(4px);
+      }
+      
+      td {
+        padding: 1rem;
+        vertical-align: middle;
+      }
+    }
+  }
+}
+
+// Badge enhancements
+.badge {
+  font-weight: 500;
+  padding: 0.35em 0.65em;
+  
+  &.bg-primary {
+    background-color: rgba($primary, 0.1) !important;
+    color: $primary;
+  }
+  
+  &.bg-success {
+    background-color: rgba($success, 0.1) !important;
+    color: $success;
+  }
+  
+  &.bg-danger {
+    background-color: rgba($danger, 0.1) !important;
+    color: $danger;
+  }
+  
+  &.badge-ap {
+    background-color: rgba($danger, 0.1) !important;
+    color: $danger;
+  }
+  
+  &.badge-honors {
+    background-color: rgba($success, 0.1) !important;
+    color: $success;
+  }
+  
+  &.badge-regular {
+    background-color: rgba($secondary, 0.1) !important;
+    color: $secondary;
+  }
+}
+
+// Form controls
+.form-control, .form-select {
+  border-radius: $border-radius;
+  padding: 0.75rem 1rem;
+  border-color: rgba(0, 0, 0, 0.1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  &:focus {
+    box-shadow: 0 0 0 3px rgba($primary, 0.1);
+    border-color: $primary;
+    transform: translateY(-1px);
+  }
+}
+
+// Alert customization
+.alert {
+  border: none;
+  border-radius: $border-radius;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+  
+  &.alert-success {
+    background-color: rgba($success, 0.1);
+    color: darken($success, 10%);
+  }
+  
+  &.alert-danger {
+    background-color: rgba($danger, 0.1);
+    color: darken($danger, 10%);
+  }
+}
+
+// Footer customization
+.footer {
+  background-color: transparent !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+// Avatar circle
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  background-color: rgba($primary, 0.1);
+  color: $primary;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+// Stats card
+.stats-card {
+  position: relative;
+  overflow: hidden;
+  
+  .stats-icon {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 3rem;
+    opacity: 0.1;
+  }
+}
+
+// Progress indicators
+.progress {
+  height: 0.5rem;
+  border-radius: 1rem;
+  background-color: rgba($primary, 0.1);
+  
+  .progress-bar {
+    border-radius: 1rem;
+  }
+}
+
+// Animations
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+// Dropdown enhancements
+.dropdown-menu {
+  border: none;
+  box-shadow: $box-shadow-lg;
+  border-radius: $border-radius;
+  
+  .dropdown-item {
+    padding: 0.75rem 1rem;
+    font-weight: 500;
+    
+    &:hover {
+      background-color: rgba($primary, 0.05);
+    }
+    
+    &:active {
+      background-color: rgba($primary, 0.1);
+    }
+  }
+}
+
+// Modal improvements
+.modal-content {
+  border: none;
+  border-radius: $border-radius-lg;
+  box-shadow: $box-shadow-lg;
+}
+
+.modal-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+}
+
+// List group enhancements
+.list-group {
+  border-radius: $border-radius;
+  
+  .list-group-item {
+    border-color: rgba(0, 0, 0, 0.05);
+    padding: 1rem;
+    
+    &:first-child {
+      border-top-left-radius: $border-radius;
+      border-top-right-radius: $border-radius;
+    }
+    
+    &:last-child {
+      border-bottom-left-radius: $border-radius;
+      border-bottom-right-radius: $border-radius;
+    }
+    
+    &:hover {
+      background-color: rgba($primary, 0.02);
+    }
+  }
+}
+
+// Loading state animations
+.turbo-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 3px;
+  background: linear-gradient(to right, $primary, lighten($primary, 20%));
+  z-index: 9999;
+  transition: width 300ms ease-out, opacity 150ms ease-in;
+  transform: translate3d(0, 0, 0);
+}
+
+html.loading {
+  cursor: wait;
+  
+  .turbo-progress-bar {
+    width: 90%;
+    transition: width 10s cubic-bezier(0, 0, 0.2, 1);
+  }
+  
+  .btn, .nav-link, a {
+    pointer-events: none;
+  }
+}
+
+// Component transitions
+.card,
+.btn,
+.nav-link,
+.form-control,
+.badge {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+// Interactive states
+.btn {
+  &:active {
+    transform: translateY(1px);
+  }
+  
+  &.loading {
+    pointer-events: none;
+    position: relative;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1rem;
+      height: 1rem;
+      margin: -0.5rem 0 0 -0.5rem;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+  }
+}
+
+// Hover effects
+.card {
+  &:hover {
+    .card-title {
+      color: $primary;
+    }
+  }
+}
+
+.table {
+  tbody tr {
+    transition: all 0.2s ease;
+    
+    &:hover {
+      transform: translateX(4px);
+    }
+  }
+}
+
+// Focus states
+.form-control, .form-select {
+  &:focus {
+    transform: translateY(-1px);
+  }
+}
+
+// Dark mode styles
+html.dark-theme {
+  background-color: #111827;
+  color: #f3f4f6;
+  
+  .navbar {
+    background-color: rgba(17, 24, 39, 0.8) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    
+    .nav-link {
+      color: #f3f4f6;
+      
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+      
+      &.active {
+        background-color: rgba($primary, 0.2);
+      }
+    }
+  }
+  
+  .card {
+    background-color: #1f2937;
+    border-color: rgba(255, 255, 255, 0.1);
+    
+    .card-header {
+      border-bottom-color: rgba(255, 255, 255, 0.1);
+    }
+  }
+  
+  .table {
+    color: #f3f4f6;
+    
+    thead {
+      background-color: #374151;
+    }
+    
+    tbody tr {
+      &:hover {
+        background-color: rgba($primary, 0.1);
+      }
+    }
+  }
+  
+  .form-control, .form-select {
+    background-color: #374151;
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f3f4f6;
+    
+    &:focus {
+      background-color: #4b5563;
+    }
+  }
+  
+  .form-check-input {
+    background-color: #374151;
+    border-color: rgba(255, 255, 255, 0.2);
+    
+    &:checked {
+      background-color: $primary;
+      border-color: $primary;
+    }
+  }
+  
+  .dropdown-menu {
+    background-color: #1f2937;
+    border-color: rgba(255, 255, 255, 0.1);
+    
+    .dropdown-item {
+      color: #f3f4f6;
+      
+      &:hover {
+        background-color: rgba($primary, 0.1);
+      }
+    }
+    
+    .dropdown-divider {
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+  }
+  
+  .modal-content {
+    background-color: #1f2937;
+    
+    .modal-header, .modal-footer {
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+  }
+  
+  .list-group-item {
+    background-color: #1f2937;
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f3f4f6;
+    
+    &:hover {
+      background-color: #374151;
+    }
+  }
+  
+  .text-muted {
+    color: #9ca3af !important;
+  }
+}
+
+// Theme toggle switch
+.theme-switch {
+  width: 48px;
+  height: 24px;
+  position: relative;
+  display: inline-block;
+  margin: 0;
+  
+  input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    
+    &:checked + .slider {
+      background-color: $primary;
+      
+      &:before {
+        transform: translateX(24px);
+      }
+    }
+  }
+  
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #4b5563;
+    transition: .4s;
+    border-radius: 24px;
+    
+    &:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+  }
+}
+
+// Loading overlay
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  
+  &.active {
+    opacity: 1;
+    visibility: visible;
+  }
+  
+  .loading-content {
+    text-align: center;
+  }
+  
+  .loading-text {
+    color: $primary;
+    font-weight: 500;
+  }
+}
+
+html.dark-theme .loading-overlay {
+  background-color: rgba(17, 24, 39, 0.9);
+}

@@ -1,0 +1,210 @@
+<%# This file contains the users management view %>
+<% content_for :page_title do %>
+  User Management
+<% end %>
+
+<% content_for :page_actions do %>
+  <%= link_to new_admin_user_path, class: 'btn btn-success', title: 'Create new user', data: { bs_toggle: 'tooltip' } do %>
+    <i class="bi bi-person-plus-fill"></i>
+  <% end %>
+<% end %>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">All Users</h5>
+    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#userStatsModal" title="View user statistics">
+      <i class="bi bi-graph-up"></i>
+    </button>
+  </div>
+  
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Courses</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @users.each do |user| %>
+            <tr>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="flex-shrink-0">
+                    <div class="bg-light rounded-circle p-3">
+                      <i class="bi bi-person fs-4"></i>
+                    </div>
+                  </div>
+                  <div class="flex-grow-1 ms-3">
+                    <div class="fw-bold"><%= user.full_name %></div>
+                    <div class="small text-muted">
+                      <%= user.email %>
+                      <% if @passwords[user.username].present? %>
+                        <br>
+                        <span class="text-danger">
+                          Default password: <%= @passwords[user.username] %>
+                        </span>
+                      <% end %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge bg-<%= user.role == 'Teacher' ? 'primary' : 'info' %>">
+                  <%= user.role %>
+                </span>
+              </td>
+              <td>
+                <% if user.teacher? %>
+                  <div class="small">
+                    <strong><%= user.courses_count %> courses teaching</strong>
+                    <ul class="list-unstyled mb-0 mt-1">
+                      <% user.courses.limit(3).each do |course| %>
+                        <li>• <%= course.name %></li>
+                      <% end %>
+                      <% if user.courses_count > 3 %>
+                        <li class="text-muted">and <%= user.courses_count - 3 %> more...</li>
+                      <% end %>
+                    </ul>
+                  </div>
+                <% else %>
+                  <div class="small">
+                    Enrolled in <%= user.courses_count %> courses
+                    <% if user.courses.any? %>
+                      <div class="text-muted mt-1">
+                        Latest: <%= user.courses.order(created_at: :desc).first.name %>
+                      </div>
+                    <% end %>
+                  </div>
+                <% end %>
+              </td>
+              <td>
+                <div class="btn-group">
+                  <%= link_to admin_user_path(user),
+                      class: 'btn btn-sm btn-outline-info',
+                      title: 'View profile',
+                      data: { bs_toggle: 'tooltip' } do %>
+                    <i class="bi bi-person-badge"></i>
+                  <% end %>
+                  
+                  <%= link_to edit_admin_user_path(user),
+                      class: 'btn btn-sm btn-outline-primary',
+                      title: 'Edit user',
+                      data: { bs_toggle: 'tooltip' } do %>
+                    <i class="bi bi-pencil"></i>
+                  <% end %>
+
+                  <% if user.access_locked? %>
+                    <%= button_to admin_unlock_user_path(user), method: :post,
+                        class: 'btn btn-sm btn-outline-success',
+                        title: 'Unlock account',
+                        form_class: 'd-inline-block',
+                        data: { 
+                          bs_toggle: 'tooltip',
+                          turbo_confirm: 'Are you sure you want to unlock this account?' 
+                        } do %>
+                      <i class="bi bi-unlock"></i>
+                    <% end %>
+                  <% else %>
+                    <%= button_to admin_lock_user_path(user), method: :post,
+                        class: 'btn btn-sm btn-outline-warning',
+                        title: 'Lock account',
+                        form_class: 'd-inline-block',
+                        data: { 
+                          bs_toggle: 'tooltip',
+                          turbo_confirm: 'Are you sure you want to lock this account?' 
+                        } do %>
+                      <i class="bi bi-lock"></i>
+                    <% end %>
+                  <% end %>
+
+                  <%= button_to admin_user_path(user), 
+                      method: :delete,
+                      class: 'btn btn-sm btn-outline-danger',
+                      title: 'Delete user',
+                      form_class: 'd-inline-block',
+                      data: { 
+                        bs_toggle: 'tooltip',
+                        turbo_confirm: 'Are you sure you want to delete this user? This action cannot be undone.' 
+                      } do %>
+                    <i class="bi bi-trash"></i>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%# User Statistics Modal %>
+<div class="modal fade" id="userStatsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">User Statistics</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Role Distribution</h6>
+              <div class="d-flex justify-content-between">
+                <span>Teachers</span>
+                <strong><%= @teachers.count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Students</span>
+                <strong><%= @students.count %></strong>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Account Status</h6>
+              <div class="d-flex justify-content-between">
+                <span>Active</span>
+                <strong><%= @active_users.count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Locked</span>
+                <strong><%= @locked_users.count %></strong>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Activity</h6>
+              <div class="d-flex justify-content-between">
+                <span>Active Today</span>
+                <strong><%= @active_today.count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Active This Week</span>
+                <strong><%= @active_this_week.count %></strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%# Initialize tooltips %>
+<% content_for :scripts do %>
+  <script>
+    document.addEventListener('turbo:load', function() {
+      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+      var tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+      })
+    })
+  </script>
+<% end %>

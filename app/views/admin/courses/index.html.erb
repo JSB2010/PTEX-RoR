@@ -1,0 +1,252 @@
+<%# Course Management View %>
+<% content_for :page_title do %>
+  Course Management
+<% end %>
+
+<% content_for :page_actions do %>
+  <%= link_to new_course_path, class: 'btn btn-success', title: 'Create new course', data: { bs_toggle: 'tooltip' } do %>
+    <i class="bi bi-plus-circle-fill me-2"></i>Add Course
+  <% end %>
+<% end %>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">All Courses</h5>
+    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#courseStatsModal" title="View course statistics">
+      <i class="bi bi-graph-up me-2"></i>Statistics
+    </button>
+  </div>
+
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Course</th>
+            <th>Teacher</th>
+            <th>Students</th>
+            <th>Level</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @courses.each do |course| %>
+            <tr>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="flex-shrink-0">
+                    <div class="bg-light rounded-circle p-3">
+                      <i class="bi bi-book fs-4 text-primary"></i>
+                    </div>
+                  </div>
+                  <div class="flex-grow-1 ms-3">
+                    <div class="fw-bold"><%= course.name %></div>
+                    <div class="small text-muted">
+                      Created <%= course.created_at.strftime("%B %d, %Y") %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="flex-grow-1">
+                    <%= course.teacher.full_name %>
+                    <div class="small text-muted"><%= course.teacher.email %></div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="d-flex align-items-center">
+                  <span class="me-2"><%= course.students.count %></span>
+                  <% if course.students.any? %>
+                    <button class="btn btn-sm btn-outline-info" type="button"
+                            data-bs-toggle="modal" 
+                            data-bs-target="#viewStudentsModal"
+                            data-course-id="<%= course.id %>"
+                            data-bs-tooltip="true"
+                            title="View enrolled students">
+                      <i class="bi bi-people-fill me-1"></i>View List
+                    </button>
+                  <% end %>
+                </div>
+              </td>
+              <td>
+                <span class="badge bg-<%= { 'AP' => 'danger', 'Honors' => 'warning', 'Regular' => 'primary' }[course.level] %>">
+                  <%= course.level %>
+                </span>
+              </td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <%= link_to course_path(course),
+                      class: 'btn btn-sm btn-outline-info',
+                      title: 'View course details',
+                      data: { bs_toggle: 'tooltip' } do %>
+                    <i class="bi bi-eye-fill"></i>
+                  <% end %>
+
+                  <%= link_to edit_course_path(course),
+                      class: 'btn btn-sm btn-outline-primary',
+                      title: 'Edit course details',
+                      data: { bs_toggle: 'tooltip' } do %>
+                    <i class="bi bi-pencil-square"></i>
+                  <% end %>
+
+                  <button type="button" 
+                          class="btn btn-sm btn-outline-success"
+                          data-bs-toggle="modal"
+                          data-bs-target="#addStudentsModal"
+                          data-course-id="<%= course.id %>"
+                          title="Add students to course">
+                    <i class="bi bi-person-plus-fill"></i>
+                  </button>
+
+                  <% if course.students.any? %>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-info"
+                            data-bs-target="#viewStudentsModal"
+                            data-course-id="<%= course.id %>"
+                            title="View enrolled students">
+                      <i class="bi bi-people-fill"></i>
+                    </button>
+                  <% end %>
+
+                  <button class="btn btn-sm btn-outline-primary"
+                          data-bs-toggle="modal"
+                          data-bs-target="#courseDetailsModal"
+                          data-course-id="<%= course.id %>"
+                          title="View course details">
+                    <i class="bi bi-info-circle-fill me-1"></i>Details
+                  </button>
+
+                  <%= button_to course_path(course),
+                      method: :delete,
+                      class: 'btn btn-sm btn-outline-danger',
+                      title: 'Delete course',
+                      data: { 
+                        turbo_confirm: 'Are you sure? This will permanently delete all associated data.'
+                      } do %>
+                    <i class="bi bi-trash3-fill"></i>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Student List Modal -->
+<div class="modal fade" id="viewStudentsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Course Students</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Email</th>
+                <th>Grade</th>
+                <th>Last Updated</th>
+              </tr>
+            </thead>
+            <tbody id="studentsList">
+              <!-- Populated via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Students Modal -->
+<div class="modal fade" id="addStudentsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Students</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <%= form_tag '', method: :post, class: 'needs-validation', id: 'addStudentsForm' do %>
+          <div class="mb-3">
+            <label class="form-label">Select Students</label>
+            <%= select_tag 'student_ids[]',
+                options_from_collection_for_select(User.students.order(:last_name), :id, :full_name),
+                multiple: true,
+                class: 'form-select',
+                data: { controller: 'select2' } %>
+          </div>
+          <div class="d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-person-plus-fill me-2"></i>Add Selected Students
+            </button>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%# Initialize tooltips %>
+<% content_for :scripts do %>
+  <script>
+    document.addEventListener('turbo:load', function() {
+      // Initialize tooltips
+      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+      tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+      })
+
+      // Handle dynamic course ID in Add Students modal
+      document.querySelectorAll('[data-bs-target="#addStudentsModal"]').forEach(button => {
+        button.addEventListener('click', function() {
+          const courseId = this.dataset.courseId
+          const form = document.getElementById('addStudentsForm')
+          form.action = `/admin/courses/${courseId}/add_students`
+        })
+      })
+
+      // Handle student list button clicks
+      document.querySelectorAll('[data-bs-target="#viewStudentsModal"]').forEach(button => {
+        button.addEventListener('click', function() {
+          const courseId = this.dataset.courseId
+          const modal = document.getElementById('viewStudentsModal')
+          const list = modal.querySelector('#studentsList')
+          list.innerHTML = '<tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm me-2"></div>Loading students...</td></tr>'
+
+          fetch(`/admin/courses/${courseId}/students`)
+            .then(response => response.json())
+            .then(data => {
+              if (data.students && data.students.length > 0) {
+                list.innerHTML = data.students.map(student => `
+                  <tr>
+                    <td>${student.name}</td>
+                    <td>${student.email}</td>
+                    <td>
+                      <span class="badge bg-${student.grade_class}">${student.grade}</span>
+                    </td>
+                    <td>${student.updated_at}</td>
+                  </tr>
+                `).join('')
+              } else {
+                list.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No students enrolled</td></tr>'
+              }
+            })
+            .catch(error => {
+              list.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading students</td></tr>'
+              console.error('Error:', error)
+            })
+        })
+      })
+    })
+  </script>
+<% end %>

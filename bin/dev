@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+require 'pathname'
+
+# Find the project root
+APP_ROOT = File.expand_path('..', __dir__)
+
+# Change to the project directory
+Dir.chdir(APP_ROOT) do
+  # Start the application using foreman
+  exec "bundle exec foreman start -f Procfile.dev"
+end

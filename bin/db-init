@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Script to initialize the database if it doesn't exist
+
+# Function to log messages with timestamps
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.."
+
+# Check if PostgreSQL is running
+log "Checking if PostgreSQL is running..."
+if ! pg_isready -q; then
+  log "PostgreSQL is not running. Starting PostgreSQL..."
+  brew services start postgresql@14
+  
+  # Wait for PostgreSQL to start
+  max_attempts=10
+  attempt=1
+  delay=2
+  
+  while [ $attempt -le $max_attempts ]; do
+    log "Waiting for PostgreSQL to start (attempt $attempt/$max_attempts)..."
+    sleep $delay
+    
+    if pg_isready -q; then
+      log "PostgreSQL started successfully."
+      break
+    fi
+    
+    attempt=$((attempt + 1))
+  done
+  
+  if [ $attempt -gt $max_attempts ]; then
+    log "ERROR: Failed to start PostgreSQL after $max_attempts attempts."
+    exit 1
+  fi
+else
+  log "PostgreSQL is already running."
+fi
+
+# Check if the database exists
+log "Checking if database exists..."
+if ! psql -lqt | cut -d \| -f 1 | grep -qw ptex_development; then
+  log "Database 'ptex_development' does not exist. Creating database..."
+  bundle exec rails db:create
+  
+  if [ $? -ne 0 ]; then
+    log "ERROR: Failed to create database."
+    exit 1
+  fi
+  
+  log "Running database migrations..."
+  bundle exec rails db:migrate
+  
+  if [ $? -ne 0 ]; then
+    log "ERROR: Failed to run migrations."
+    exit 1
+  fi
+  
+  log "Database initialized successfully."
+else
+  log "Database 'ptex_development' already exists."
+  
+  # Check if migrations are pending
+  log "Checking for pending migrations..."
+  if bundle exec rails db:migrate:status | grep -q "down"; then
+    log "Running pending migrations..."
+    bundle exec rails db:migrate
+    
+    if [ $? -ne 0 ]; then
+      log "ERROR: Failed to run migrations."
+      exit 1
+    fi
+    
+    log "Migrations completed successfully."
+  else
+    log "No pending migrations."
+  fi
+fi
+
+log "Database initialization complete."
+exit 0

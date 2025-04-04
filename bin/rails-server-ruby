@@ -1,0 +1,111 @@
+#!/usr/bin/env ruby
+# A Ruby script to start the Rails server with all components
+
+require 'fileutils'
+require 'socket'
+require 'open3'
+
+# Set up paths
+APP_ROOT = File.expand_path('..', __dir__)
+PID_DIR = File.join(APP_ROOT, 'tmp', 'pids')
+LOG_DIR = File.join(APP_ROOT, 'log')
+
+# Create directories if they don't exist
+FileUtils.mkdir_p(PID_DIR)
+FileUtils.mkdir_p(LOG_DIR)
+
+# Helper method to log messages
+def log(message)
+  puts "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S')}] #{message}"
+end
+
+# Helper method to run a command
+def run_command(command)
+  log "Running: #{command}"
+  stdout, stderr, status = Open3.capture3(command)
+  
+  if status.success?
+    return true
+  else
+    log "Error: #{stderr}"
+    return false
+  end
+end
+
+# Check if PostgreSQL is running
+log "Checking PostgreSQL status..."
+pg_running = system("pg_isready -q")
+unless pg_running
+  log "Starting PostgreSQL..."
+  run_command("brew services start postgresql@14")
+  sleep 5
+  
+  # Check again
+  pg_running = system("pg_isready -q")
+  unless pg_running
+    log "ERROR: Failed to start PostgreSQL. Please start it manually."
+    exit 1
+  end
+  
+  log "PostgreSQL started successfully."
+else
+  log "PostgreSQL is already running."
+end
+
+# Check if Redis is running
+log "Checking Redis status..."
+redis_running = system("redis-cli ping > /dev/null 2>&1")
+unless redis_running
+  log "Starting Redis..."
+  run_command("brew services start redis")
+  sleep 3
+  
+  # Check again
+  redis_running = system("redis-cli ping > /dev/null 2>&1")
+  unless redis_running
+    log "ERROR: Failed to start Redis. Please start it manually."
+    exit 1
+  end
+  
+  log "Redis started successfully."
+else
+  log "Redis is already running."
+end
+
+# Kill any existing SolidQueue processes
+log "Checking for existing SolidQueue processes..."
+pkill_output = `pgrep -f "solid_queue_monitor.rb" || echo ""`.strip
+unless pkill_output.empty?
+  log "Killing existing SolidQueue processes: #{pkill_output}"
+  system("pkill -f solid_queue_monitor.rb")
+  sleep 2
+  
+  # Double-check that processes are actually killed
+  pkill_output = `pgrep -f "solid_queue_monitor.rb" || echo ""`.strip
+  unless pkill_output.empty?
+    log "Forcefully killing remaining processes: #{pkill_output}"
+    system("pkill -9 -f solid_queue_monitor.rb")
+    sleep 1
+  end
+end
+
+# Clean up any stale PID files
+log "Cleaning up stale PID files..."
+Dir.glob(File.join(PID_DIR, "*.pid")).each do |file|
+  begin
+    File.delete(file)
+  rescue => e
+    log "Error deleting PID file #{file}: #{e.message}"
+  end
+end
+
+# Start the Rails server
+log "Starting Rails server..."
+Dir.chdir(APP_ROOT)
+
+# Use the original Rails command
+ENV['RAILS_ENV'] = 'development'
+ENV['RAILS_SERVE_STATIC_FILES'] = 'true'
+
+# Start the Rails server
+exec("bundle", "exec", "puma", "-C", "config/puma.rb", *ARGV)

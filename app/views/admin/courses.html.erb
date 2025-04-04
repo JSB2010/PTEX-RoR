@@ -1,0 +1,246 @@
+<%% content_for :page_title do %>
+  Course Management
+<%% end %>
+
+<%% content_for :page_actions do %>
+  <%= link_to new_course_path, class: 'btn btn-success', title: 'Create new course', data: { bs_toggle: 'tooltip' } do %>
+    <i class="bi bi-plus-circle-fill me-2"></i>Add Course
+  <% end %>
+<%% end %>
+
+<div class="card">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Course</th>
+            <th>Teacher</th>
+            <th>Students</th>
+            <th>Level</th>
+            <th>Average Grade</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%% @courses.each do |course| %>
+            <tr>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="flex-shrink-0">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+                      <i class="bi bi-book fs-4 text-primary"></i>
+                    </div>
+                  </div>
+                  <div class="flex-grow-1 ms-3">
+                    <div class="fw-bold"><%= course.name %></div>
+                    <div class="small text-muted">
+                      Created: <%= course.created_at.strftime("%B %d, %Y") %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <%= link_to course.teacher.full_name, admin_users_path(anchor: "user-#{course.teacher.id}"),
+                    class: 'text-decoration-none' %>
+                <div class="small text-muted">
+                  <%= course.teacher.email %>
+                </div>
+              </td>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="me-2">
+                    <%= course.students.count %>
+                  </div>
+                  <%% if course.students.any? %>
+                    <div class="dropdown">
+                      <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="dropdown"
+                              title="View enrolled students" data-bs-toggle="tooltip">
+                        <i class="bi bi-people-fill me-1"></i>View List
+                      </button>
+                      <ul class="dropdown-menu">
+                        <%% course.students.limit(10).each do |student| %>
+                          <li>
+                            <span class="dropdown-item">
+                              <%= student.full_name %>
+                              <%% if grade = course.grades.find_by(user: student) %>
+                                <span class="badge bg-<%= grade.letter_grade == 'A' ? 'success' : 
+                                                        grade.letter_grade == 'B' ? 'primary' :
+                                                        grade.letter_grade == 'C' ? 'warning' :
+                                                        'danger' %>">
+                                  <%= grade.letter_grade %>
+                                </span>
+                              <%% end %>
+                            </span>
+                          </li>
+                        <%% end %>
+                        <%% if course.students.count > 10 %>
+                          <li><hr class="dropdown-divider"></li>
+                          <li>
+                            <span class="dropdown-item text-muted">
+                              and <%= course.students.count - 10 %> more...
+                            </span>
+                          </li>
+                        <%% end %>
+                      </ul>
+                    </div>
+                  <%% end %>
+                </div>
+              </td>
+              <td>
+                <span class="badge bg-<%= { 'AP' => 'danger', 'Honors' => 'warning', 'Regular' => 'primary' }[course.level] %>">
+                  <%= course.level %>
+                </span>
+              </td>
+              <td>
+                <%% if course.grades.any? %>
+                  <%% avg = course.grades.average(:numeric_grade).round(1) %>
+                  <div class="d-flex align-items-center">
+                    <div class="me-2">
+                      <%= avg %>%
+                    </div>
+                    <div class="progress" style="width: 100px">
+                      <div class="progress-bar bg-<%= avg >= 90 ? 'success' :
+                                                    avg >= 80 ? 'primary' :
+                                                    avg >= 70 ? 'warning' :
+                                                    'danger' %>"
+                          style="width: <%= avg %>%">
+                      </div>
+                    </div>
+                  </div>
+                <%% else %>
+                  <span class="text-muted">No grades</span>
+                <%% end %>
+              </td>
+              <td>
+                <div class="btn-group float-end">
+                  <%= link_to course_path(course), class: 'btn btn-sm btn-outline-info', title: 'View course details', data: { bs_toggle: 'tooltip' } do %>
+                    <i class="bi bi-eye-fill"></i>
+                  <% end %>
+
+                  <%= link_to edit_course_path(course), class: 'btn btn-sm btn-outline-primary', title: 'Edit course', data: { bs_toggle: 'tooltip' } do %>
+                    <i class="bi bi-pencil-square"></i>
+                  <% end %>
+
+                  <%= button_to course_path(course), method: :delete,
+                      class: 'btn btn-sm btn-outline-danger',
+                      title: 'Delete course',
+                      data: { 
+                        bs_toggle: 'tooltip',
+                        turbo_confirm: 'Are you sure? This will permanently delete the course and all associated data.'
+                      } do %>
+                    <i class="bi bi-trash3-fill"></i>
+                  <% end %>
+
+                  <div class="btn-group">
+                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                            data-bs-toggle="dropdown"
+                            title="More actions"
+                            data-bs-toggle="tooltip">
+                      <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li>
+                        <%= link_to stats_course_path(course), class: 'dropdown-item' do %>
+                          <i class="bi bi-graph-up me-2"></i>View Statistics
+                        <% end %>
+                      </li>
+                      <li>
+                        <button type="button" class="dropdown-item" data-bs-toggle="modal"
+                                data-bs-target="#addStudentsModal" data-course-id="<%= course.id %>">
+                          <i class="bi bi-person-plus-fill me-2"></i>Add Students
+                        </button>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <%= link_to '#', class: 'dropdown-item text-danger',
+                            data: { turbo_method: :post, turbo_confirm: 'Are you sure you want to archive this course?' } do %>
+                          <i class="bi bi-archive-fill me-2"></i>Archive Course
+                        <% end %>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          <%% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%# Add Students Modal %>
+<div class="modal fade" id="addStudentsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Students to Course</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <%%= form_tag add_student_course_path(''), method: :post, id: 'addStudentsForm', class: 'needs-validation' do %>
+          <div class="mb-3">
+            <label class="form-label">Select Students</label>
+            <%= select_tag 'student_ids[]',
+                options_from_collection_for_select(User.students, :id, :full_name),
+                multiple: true,
+                class: 'form-select',
+                data: { controller: 'select2' } %>
+          </div>
+          <div class="d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-person-plus-fill me-2"></i>Add Selected Students
+            </button>
+          </div>
+        <%% end %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%# Course Statistics Modal %>
+<div class="modal fade" id="courseStatsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Course Statistics</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Course Levels</h6>
+              <div class="d-flex justify-content-between">
+                <span>AP Courses</span>
+                <strong><%= @courses.where(level: 'AP').count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Honors</span>
+                <strong><%= @courses.where(level: 'Honors').count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Regular</span>
+                <strong><%= @courses.where(level: 'Regular').count %></strong>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Grade Distribution</h6>
+              <%% grade_counts = Grade.group(:letter_grade).count %>
+              <%% ['A', 'B', 'C', 'D', 'F'].each do |grade| %>
+                <div class="d-flex justify-content-between">
+                  <span><%= grade %></span>
+                  <strong><%= grade_counts[grade] || 0 %></strong>
+                </div>
+              <%% end %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

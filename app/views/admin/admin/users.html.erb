@@ -1,0 +1,208 @@
+<% content_for :page_title do %>
+  User Management
+<% end %>
+
+<% content_for :page_actions do %>
+  <%= link_to new_user_registration_path, class: 'btn btn-success' do %>
+    <i class="bi bi-person-plus me-2"></i>Add New User
+  <% end %>
+<% end %>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">All Users</h5>
+    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#userStatsModal">
+      <i class="bi bi-graph-up me-2"></i>View Statistics
+    </button>
+  </div>
+  
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Courses</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @users.each do |user| %>
+            <tr>
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="flex-shrink-0">
+                    <div class="bg-light rounded-circle p-3">
+                      <i class="bi bi-person fs-4"></i>
+                    </div>
+                  </div>
+                  <div class="flex-grow-1 ms-3">
+                    <div class="fw-bold"><%= user.full_name %></div>
+                    <div class="small text-muted">
+                      <%= user.email %>
+                      <% if @passwords[user.username].present? %>
+                        <br>
+                        <span class="text-danger">
+                          Default password: <%= @passwords[user.username] %>
+                        </span>
+                      <% end %>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge bg-<%= user.role == 'Teacher' ? 'primary' : 'info' %>">
+                  <%= user.role %>
+                </span>
+              </td>
+              <td>
+                <% if user.teacher? %>
+                  <div class="small">
+                    <strong><%= pluralize(user.courses.count, 'course') %> teaching</strong>
+                    <% if user.courses.any? %>
+                      <ul class="list-unstyled mb-0 mt-1">
+                        <% user.courses.each do |course| %>
+                          <li>
+                            • <%= course.name %>
+                            <span class="badge bg-<%= { 'AP' => 'danger', 'Honors' => 'warning', 'Regular' => 'primary' }[course.level] %>">
+                              <%= course.level %>
+                            </span>
+                          </li>
+                        <% end %>
+                      </ul>
+                    <% end %>
+                  </div>
+                <% else %>
+                  <div class="small">
+                    <strong><%= pluralize(user.courses.count, 'course') %> enrolled</strong>
+                    <% if user.courses.any? %>
+                      <ul class="list-unstyled mb-0 mt-1">
+                        <% user.courses.each do |course| %>
+                          <li>
+                            • <%= course.name %>
+                            <% if grade = course.grades.find_by(user: user) %>
+                              <span class="badge bg-<%= grade_progress_class(grade.letter_grade) %>">
+                                <%= grade.letter_grade %>
+                              </span>
+                            <% end %>
+                          </li>
+                        <% end %>
+                      </ul>
+                    <% else %>
+                      <p class="text-muted mb-0">Not enrolled in any courses</p>
+                    <% end %>
+                  </div>
+                <% end %>
+              </td>
+              <td>
+                <div class="btn-group">
+                  <% if user.access_locked? %>
+                    <%= button_to admin_unlock_user_path(user), method: :post,
+                        class: 'btn btn-sm btn-outline-success',
+                        title: 'Unlock User Account',
+                        data: { 
+                          bs_toggle: 'tooltip',
+                          turbo_confirm: 'Are you sure you want to unlock this account?' 
+                        } do %>
+                      <i class="bi bi-unlock"></i>
+                    <% end %>
+                  <% else %>
+                    <%= button_to admin_lock_user_path(user), method: :post,
+                        class: 'btn btn-sm btn-outline-warning',
+                        title: 'Lock User Account',
+                        data: { 
+                          bs_toggle: 'tooltip',
+                          turbo_confirm: 'Are you sure you want to lock this account?' 
+                        } do %>
+                      <i class="bi bi-lock"></i>
+                    <% end %>
+                  <% end %>
+                  
+                  <%= link_to edit_admin_user_path(user),
+                      class: 'btn btn-sm btn-outline-primary',
+                      title: 'Edit User',
+                      data: { bs_toggle: 'tooltip' } do %>
+                    <i class="bi bi-pencil"></i>
+                  <% end %>
+
+                  <%= link_to admin_user_path(user),
+                      class: 'btn btn-sm btn-outline-info',
+                      title: 'View User Details',
+                      data: { bs_toggle: 'tooltip' } do %>
+                    <i class="bi bi-eye"></i>
+                  <% end %>
+                  
+                  <%= button_to admin_user_path(user), method: :delete,
+                      class: 'btn btn-sm btn-outline-danger',
+                      title: 'Delete User',
+                      data: { 
+                        bs_toggle: 'tooltip',
+                        turbo_confirm: 'Are you sure? This will permanently delete all associated data.' 
+                      } do %>
+                    <i class="bi bi-trash"></i>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<%# User Statistics Modal %>
+<div class="modal fade" id="userStatsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">User Statistics</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Role Distribution</h6>
+              <div class="d-flex justify-content-between">
+                <span>Teachers</span>
+                <strong><%= @teachers.count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Students</span>
+                <strong><%= @students.count %></strong>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Account Status</h6>
+              <div class="d-flex justify-content-between">
+                <span>Active</span>
+                <strong><%= @active_users.count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Locked</span>
+                <strong><%= @locked_users.count %></strong>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="border rounded p-3">
+              <h6 class="mb-2">Activity</h6>
+              <div class="d-flex justify-content-between">
+                <span>Active Today</span>
+                <strong><%= @active_today.count %></strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Active This Week</span>
+                <strong><%= @active_this_week.count %></strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

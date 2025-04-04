@@ -1,0 +1,240 @@
+#!/usr/bin/env ruby
+# Simple server startup script that handles all necessary services
+
+require 'fileutils'
+require 'open3'
+require 'socket'
+require 'timeout'
+
+# Set up paths
+APP_ROOT = File.expand_path('..', __dir__)
+PID_DIR = File.join(APP_ROOT, 'tmp', 'pids')
+LOG_DIR = File.join(APP_ROOT, 'log')
+
+# Create directories if they don't exist
+FileUtils.mkdir_p(PID_DIR)
+FileUtils.mkdir_p(LOG_DIR)
+
+# Helper method to log messages
+def log(message)
+  puts "[#{Time.now.strftime('%Y-%m-%d %H:%M:%S')}] #{message}"
+end
+
+# Helper method to run a command and return its output
+def run_command(command)
+  log "Running: #{command}"
+  stdout, stderr, status = Open3.capture3(command)
+  if status.success?
+    log "Command completed successfully"
+  else
+    log "Command failed with status: #{status.exitstatus}"
+    log "Error: #{stderr}"
+  end
+  [stdout, stderr, status]
+end
+
+# Check if PostgreSQL is running
+log "Checking PostgreSQL status..."
+pg_status = system("pg_isready -q")
+unless pg_status
+  log "PostgreSQL is not running. Starting PostgreSQL..."
+  # Use system instead of run_command to avoid capturing output
+  system("brew services start postgresql@14")
+  log "Waiting for PostgreSQL to start..."
+
+  # Wait for PostgreSQL to start with a timeout
+  start_time = Time.now
+  pg_started = false
+
+  while Time.now - start_time < 30 # 30 second timeout
+    sleep 1
+    if system("pg_isready -q")
+      pg_started = true
+      break
+    end
+  end
+
+  unless pg_started
+    log "ERROR: Failed to start PostgreSQL within timeout. Please start it manually."
+    exit 1
+  end
+
+  log "PostgreSQL started successfully."
+else
+  log "PostgreSQL is already running."
+end
+
+# Check if Redis is running
+log "Checking Redis status..."
+redis_status = system("redis-cli ping > /dev/null 2>&1")
+unless redis_status
+  log "Redis is not running. Starting Redis..."
+  # Use system instead of run_command to avoid capturing output
+  system("brew services start redis")
+  log "Waiting for Redis to start..."
+
+  # Wait for Redis to start with a timeout
+  start_time = Time.now
+  redis_started = false
+
+  while Time.now - start_time < 20 # 20 second timeout
+    sleep 1
+    if system("redis-cli ping > /dev/null 2>&1")
+      redis_started = true
+      break
+    end
+  end
+
+  unless redis_started
+    log "ERROR: Failed to start Redis within timeout. Please start it manually."
+    exit 1
+  end
+
+  log "Redis started successfully."
+else
+  log "Redis is already running."
+end
+
+# Check disk space
+log "Checking disk space..."
+begin
+  df_output = `df -k #{APP_ROOT}`.split("\n")[1]
+  if df_output
+    disk_space = df_output.split[4].to_i
+    if disk_space > 90
+      log "WARNING: Disk space is critically low (#{disk_space}% used)"
+      log "Cleaning up log files..."
+
+      # Run the cleanup script with a timeout
+      cleanup_pid = spawn("#{APP_ROOT}/bin/clean_logs.sh")
+
+      # Wait for the cleanup script to finish with a timeout
+      begin
+        Timeout.timeout(30) do
+          Process.wait(cleanup_pid)
+        end
+      rescue Timeout::Error
+        log "WARNING: Log cleanup timed out after 30 seconds"
+        Process.kill('TERM', cleanup_pid) rescue nil
+      end
+
+      # Check disk space again after cleanup
+      df_output = `df -k #{APP_ROOT}`.split("\n")[1]
+      disk_space = df_output.split[4].to_i
+      if disk_space > 90
+        log "WARNING: Disk space is still critically low (#{disk_space}% used) after cleanup"
+        log "Please free up disk space manually"
+      end
+    end
+  end
+rescue => e
+  log "Error checking disk space: #{e.message}"
+  log "Continuing anyway..."
+end
+
+# Check PostgreSQL connections
+log "Checking PostgreSQL connections..."
+begin
+  pg_connections = `psql -U jbarkin28 -d postgres -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null`.strip.to_i
+  pg_max_connections = `psql -U jbarkin28 -d postgres -t -c "SHOW max_connections;" 2>/dev/null`.strip.to_i
+
+  if pg_connections > 0 && pg_max_connections > 0
+    log "PostgreSQL connections: #{pg_connections} / #{pg_max_connections}"
+
+    # If we're using more than 80% of available connections, clean up idle connections
+    if (pg_connections.to_f / pg_max_connections) * 100 > 80
+      log "WARNING: Too many PostgreSQL connections. Cleaning up idle connections..."
+      system(%Q{psql -U jbarkin28 -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND (now() - state_change) > interval '5 minutes';"})
+    end
+  end
+rescue => e
+  log "Error checking PostgreSQL connections: #{e.message}"
+end
+
+# Configure database connection pool
+log "Configuring database connection pool..."
+ENV['RAILS_MAX_THREADS'] = '2'
+
+# Start SolidQueue
+log "Starting SolidQueue..."
+
+# Skip SolidQueue if the SKIP_SOLID_QUEUE environment variable is set
+if ENV['SKIP_SOLID_QUEUE'] == 'true'
+  log "Skipping SolidQueue startup as requested by SKIP_SOLID_QUEUE environment variable"
+else
+  # Kill any existing SolidQueue processes
+  pkill_output = `pgrep -f "solid_queue_monitor.rb" || echo ""`.strip
+  unless pkill_output.empty?
+    log "Killing existing SolidQueue processes: #{pkill_output}"
+    system("pkill -f solid_queue_monitor.rb")
+    sleep 2
+
+    # Double-check that processes are actually killed
+    pkill_output = `pgrep -f "solid_queue_monitor.rb" || echo ""`.strip
+    unless pkill_output.empty?
+      log "Forcefully killing remaining processes: #{pkill_output}"
+      system("pkill -9 -f solid_queue_monitor.rb")
+      sleep 1
+    end
+  end
+
+  # Clean up any stale PID files
+  log "Cleaning up stale PID files..."
+  Dir.glob(File.join(PID_DIR, "*.pid")).each do |file|
+    begin
+      File.delete(file)
+    rescue => e
+      log "Error deleting PID file #{file}: #{e.message}"
+    end
+  end
+
+  Dir.glob(File.join(PID_DIR, "*.lock")).each do |file|
+    begin
+      File.delete(file)
+    rescue => e
+      log "Error deleting lock file #{file}: #{e.message}"
+    end
+  end
+
+  # Clean up database records
+  log "Cleaning up database records..."
+
+  begin
+    # Clean up stale processes in the database
+    log "Cleaning up stale processes in the database..."
+    system("cd #{APP_ROOT} && bin/rails runner \"begin; SolidQueue::Process.where(hostname: Socket.gethostname).destroy_all; rescue => e; puts \\\"Error cleaning up stale processes: #{e.message}\\\"; end\"")
+  rescue => e
+    log "Error cleaning up stale processes: #{e.message}"
+  end
+
+  # Start the SolidQueue monitor
+  log "Starting SolidQueue monitor..."
+  begin
+    solid_queue_pid = spawn("ruby", "#{APP_ROOT}/bin/solid_queue_monitor.rb",
+                          out: [File.join(LOG_DIR, "solid_queue_monitor.log"), "a"],
+                          err: [File.join(LOG_DIR, "solid_queue_monitor.log"), "a"])
+    Process.detach(solid_queue_pid)
+
+    # Write the PID to a file
+    File.write(File.join(PID_DIR, "solid_queue_monitor.pid"), solid_queue_pid.to_s)
+    log "SolidQueue monitor started with PID: #{solid_queue_pid}"
+
+    # Wait a moment to make sure it's running
+    sleep 3
+
+    # Verify that the process is still running
+    if system("ps -p #{solid_queue_pid} > /dev/null")
+      log "SolidQueue monitor is running successfully (PID: #{solid_queue_pid})"
+      log "See logs at #{File.join(LOG_DIR, "solid_queue_monitor.log")}"
+    else
+      log "WARNING: SolidQueue monitor may not have started properly. Check logs for details."
+    end
+  rescue => e
+    log "Error starting SolidQueue monitor: #{e.message}"
+    log "Continuing without SolidQueue..."
+  end
+end
+
+# Start the Rails server
+log "Starting Rails server..."
+exec("bundle", "exec", "rails", "server", *ARGV)

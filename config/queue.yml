@@ -1,0 +1,53 @@
+development: &default
+  # Number of worker threads - keep low in development to reduce resource usage
+  concurrency: 1
+  # Job queues to process with priorities (higher number = higher priority)
+  queues:
+    - [default, 1]
+    - [mailers, 2]  # Higher priority for emails
+    - [active_storage, 1]
+    - [maintenance, 1]
+  # How often to check for new jobs (in seconds)
+  polling_interval: 2.0
+  # Dispatcher configuration
+  dispatcher:
+    # How often the dispatcher checks for new jobs (in seconds)
+    polling_interval: 2.0
+    # Maximum number of jobs to process in a batch
+    batch_size: 25
+  # Database connection pool size - keep small to avoid connection issues
+  connection_pool_size: 1
+  # Maximum number of retries for failed jobs
+  max_retries: 3
+  # Delay between retries (in seconds) with exponential backoff
+  retry_delay: 30
+  # Exponential backoff for retries (multiply delay by this factor for each retry)
+  retry_backoff: 2.0
+  # Maximum delay between retries (in seconds)
+  max_retry_delay: 3600
+  # Enable metrics collection
+  metrics:
+    enabled: true
+
+test:
+  <<: *default
+  concurrency: 1
+  queues:
+    - default
+  polling_interval: 0.1
+  dispatcher:
+    polling_interval: 0.1
+    batch_size: 50
+
+production:
+  <<: *default
+  concurrency: <%= ENV.fetch('WORKER_CONCURRENCY', 2) %>
+  polling_interval: <%= ENV.fetch('POLLING_INTERVAL', 1.0) %>
+  dispatcher:
+    polling_interval: 1.0
+    batch_size: 100
+  metrics:
+    enabled: true
+    statsd_host: <%= ENV.fetch('STATSD_HOST', 'localhost') %>
+    statsd_port: <%= ENV.fetch('STATSD_PORT', 8125) %>
+    namespace: <%= ENV.fetch('METRICS_NAMESPACE', 'production.jobs') %>

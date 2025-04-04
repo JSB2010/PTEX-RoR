@@ -1,0 +1,155 @@
+<% content_for :page_title do %>
+  User: <%= @user.full_name %>
+<% end %>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">User Details</h5>
+    <div>
+      <%= link_to edit_admin_user_path(@user), class: 'btn btn-sm btn-primary' do %>
+        <i class="bi bi-pencil me-2"></i>Edit
+      <% end %>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-6">
+        <h6 class="text-muted mb-3">Basic Information</h6>
+        <dl class="row">
+          <dt class="col-sm-4">Name</dt>
+          <dd class="col-sm-8"><%= @user.full_name %></dd>
+          
+          <dt class="col-sm-4">Email</dt>
+          <dd class="col-sm-8"><%= @user.email %></dd>
+          
+          <dt class="col-sm-4">Role</dt>
+          <dd class="col-sm-8">
+            <span class="badge bg-<%= @user.role == 'Teacher' ? 'primary' : @user.role == 'Admin' ? 'danger' : 'info' %>">
+              <%= @user.role %>
+            </span>
+          </dd>
+          
+          <dt class="col-sm-4">Username</dt>
+          <dd class="col-sm-8"><%= @user.username %></dd>
+          
+          <dt class="col-sm-4">Created</dt>
+          <dd class="col-sm-8"><%= @user.created_at.strftime("%B %d, %Y") %></dd>
+        </dl>
+      </div>
+      
+      <div class="col-md-6">
+        <h6 class="text-muted mb-3">Account Status</h6>
+        <dl class="row">
+          <dt class="col-sm-4">Status</dt>
+          <dd class="col-sm-8">
+            <% if @user.access_locked? %>
+              <span class="badge bg-danger">Locked</span>
+            <% else %>
+              <span class="badge bg-success">Active</span>
+            <% end %>
+          </dd>
+          
+          <dt class="col-sm-4">Last Activity</dt>
+          <dd class="col-sm-8">
+            <%= time_ago_in_words(@user.updated_at) %> ago
+          </dd>
+          
+          <dt class="col-sm-4">Failed Attempts</dt>
+          <dd class="col-sm-8"><%= @user.failed_attempts || 0 %></dd>
+          
+          <% if @user.locked_at %>
+            <dt class="col-sm-4">Locked At</dt>
+            <dd class="col-sm-8"><%= @user.locked_at.strftime("%B %d, %Y at %H:%M") %></dd>
+          <% end %>
+        </dl>
+      </div>
+    </div>
+    
+    <hr>
+    
+    <div class="row mt-4">
+      <div class="col-12">
+        <h6 class="text-muted mb-3">
+          <% if @user.teacher? %>
+            Courses Teaching (<%= @user.courses_count %>)
+          <% else %>
+            Enrolled Courses (<%= @user.courses_count %>)
+          <% end %>
+        </h6>
+        
+        <% if @user.courses.any? %>
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Level</th>
+                  <% if @user.teacher? %>
+                    <th>Students</th>
+                  <% else %>
+                    <th>Grade</th>
+                  <% end %>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @user.courses.each do |course| %>
+                  <tr>
+                    <td><%= course.name %></td>
+                    <td>
+                      <span class="badge bg-<%= { 'AP' => 'danger', 'Honors' => 'warning', 'Regular' => 'primary' }[course.level] %>">
+                        <%= course.level %>
+                      </span>
+                    </td>
+                    <% if @user.teacher? %>
+                      <td><%= course.students.count %></td>
+                    <% else %>
+                      <td>
+                        <% grade = course.grades.find_by(user: @user) %>
+                        <% if grade %>
+                          <%= grade.letter_grade %> (<%= number_with_precision(grade.numeric_grade, precision: 1) %>%)
+                        <% else %>
+                          <span class="text-muted">N/A</span>
+                        <% end %>
+                      </td>
+                    <% end %>
+                    <td>
+                      <%= link_to course_path(course), class: 'btn btn-sm btn-outline-primary' do %>
+                        <i class="bi bi-eye"></i>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% else %>
+          <p class="text-muted">No courses found.</p>
+        <% end %>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer">
+    <div class="d-flex gap-2">
+      <%= link_to admin_users_path, class: 'btn btn-outline-secondary' do %>
+        <i class="bi bi-arrow-left me-2"></i>Back to Users
+      <% end %>
+      
+      <% if @user.access_locked? %>
+        <%= button_to admin_unlock_user_path(@user), method: :post, class: 'btn btn-outline-success' do %>
+          <i class="bi bi-unlock me-2"></i>Unlock User
+        <% end %>
+      <% else %>
+        <%= button_to admin_lock_user_path(@user), method: :post, class: 'btn btn-outline-warning' do %>
+          <i class="bi bi-lock me-2"></i>Lock User
+        <% end %>
+      <% end %>
+      
+      <%= button_to admin_user_path(@user), method: :delete, 
+          class: 'btn btn-outline-danger ms-auto',
+          data: { turbo_confirm: 'Are you sure? This will permanently delete all associated data.' } do %>
+        <i class="bi bi-trash me-2"></i>Delete User
+      <% end %>
+    </div>
+  </div>
+</div>

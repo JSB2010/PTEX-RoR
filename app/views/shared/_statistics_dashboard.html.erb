@@ -1,0 +1,130 @@
+<%# Statistics Dashboard %>
+<div class="statistics-dashboard">
+  <div class="row g-4">
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Total Students</h6>
+          <h2 class="card-title mb-0"><%= stats[:total_students] %></h2>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Class Average</h6>
+          <h2 class="card-title mb-0">
+            <%= number_with_precision(stats[:class_average], precision: 1) %>%
+          </h2>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Passing Rate</h6>
+          <h2 class="card-title mb-0">
+            <%= format_percentage(stats[:passing_rate]) %>
+          </h2>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Grade Distribution</h6>
+          <div class="grade-distribution">
+            <% stats[:grade_distribution].each do |grade, count| %>
+              <div class="grade-bar">
+                <span class="grade-label"><%= grade %></span>
+                <div class="progress">
+                  <div class="progress-bar <%= grade_progress_class(grade) %>"
+                       style="width: <%= (count.to_f / stats[:total_students] * 100).round %>%"
+                       role="progressbar"
+                       aria-valuenow="<%= count %>"
+                       aria-valuemin="0"
+                       aria-valuemax="<%= stats[:total_students] %>">
+                    <%= count %>
+                  </div>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <% if local_assigns[:show_grade_trends] && @grade %>
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Grade History</h5>
+            <div class="grade-history">
+              <% grade_trend_data(@grade).each do |change| %>
+                <div class="grade-change">
+                  <span class="date"><%= l(change[:date].to_datetime, format: :short) %></span>
+                  <span class="change">
+                    <%= number_with_precision(change[:from], precision: 1) %>% →
+                    <%= number_with_precision(change[:to], precision: 1) %>%
+                  </span>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<% content_for :styles do %>
+  <style>
+    .grade-distribution {
+      margin-top: 1rem;
+    }
+    
+    .grade-bar {
+      margin-bottom: 0.5rem;
+    }
+    
+    .grade-label {
+      display: inline-block;
+      width: 30px;
+      font-weight: bold;
+    }
+    
+    .grade-history {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .grade-change {
+      padding: 0.5rem;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .grade-change:last-child {
+      border-bottom: none;
+    }
+    
+    .grade-change .date {
+      color: #666;
+      font-size: 0.9rem;
+    }
+    
+    .statistics-dashboard .card {
+      transition: transform 0.2s;
+    }
+    
+    .statistics-dashboard .card:hover {
+      transform: translateY(-5px);
+    }
+  </style>
+<% end %>

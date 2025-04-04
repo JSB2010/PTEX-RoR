@@ -1,0 +1,95 @@
+#!/usr/bin/env ruby
+
+require File.expand_path('../config/environment', __dir__)
+require 'fileutils'
+
+class ProcessSupervisor
+  PID_DIR = Rails.root.join('tmp/pids')
+  LOG_DIR = Rails.root.join('log')
+
+  def initialize
+    FileUtils.mkdir_p(PID_DIR)
+    FileUtils.mkdir_p(LOG_DIR)
+    @pids = {}
+    @running = true
+  end
+
+  def start
+    trap_signals
+    start_processes
+    monitor_processes
+  end
+
+  private
+
+  def trap_signals
+    trap('TERM') { handle_term }
+    trap('INT') { handle_term }
+  end
+
+  def handle_term
+    @running = false
+    stop_processes
+  end
+
+  def start_processes
+    start_process('worker', "bundle exec rails solid_queue:process type=worker queues=default,mailers,active_storage,maintenance")
+    start_process('dispatcher', "bundle exec rails solid_queue:process type=dispatcher")
+  end
+
+  def start_process(name, command)
+    log_file = LOG_DIR.join("#{name}.log")
+    pid = Process.spawn(
+      { 'RAILS_ENV' => Rails.env, 'OBJC_DISABLE_INITIALIZE_FORK_SAFETY' => 'YES' },
+      command,
+      out: log_file,
+      err: log_file,
+      pgroup: true
+    )
+    Process.detach(pid)
+    @pids[name] = pid
+    write_pid_file(name, pid)
+  end
+
+  def write_pid_file(name, pid)
+    File.write(PID_DIR.join("#{name}.pid"), pid.to_s)
+  end
+
+  def monitor_processes
+    while @running
+      @pids.each do |name, pid|
+        begin
+          Process.getpgid(pid)
+        rescue Errno::ESRCH
+          # Process died, restart it
+          puts "#{name} process died, restarting..."
+          start_process(name, command_for(name))
+        end
+      end
+      sleep 1
+    end
+  end
+
+  def command_for(name)
+    case name
+    when 'worker'
+      "bundle exec rails solid_queue:process type=worker queues=default,mailers,active_storage,maintenance"
+    when 'dispatcher'
+      "bundle exec rails solid_queue:process type=dispatcher"
+    end
+  end
+
+  def stop_processes
+    @pids.each do |name, pid|
+      begin
+        Process.kill('-TERM', pid)
+        File.unlink(PID_DIR.join("#{name}.pid"))
+      rescue Errno::ESRCH
+        # Process already gone
+      end
+    end
+  end
+end
+
+supervisor = ProcessSupervisor.new
+supervisor.start

@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+# This is the original Rails server command
+
+# Set environment variable to use inline adapter for ActiveJob
+ENV['ACTIVE_JOB_ADAPTER'] = 'inline'
+ENV['SKIP_SOLID_QUEUE'] = 'true'
+
+# Use the original Rails command
+APP_PATH = File.expand_path('../config/application', __dir__)
+require_relative "../config/boot"
+require "rails/commands"

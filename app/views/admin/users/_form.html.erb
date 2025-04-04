@@ -1,0 +1,67 @@
+<%= form_with(model: [:admin, user], local: true) do |form| %>
+  <% if user.errors.any? %>
+    <div class="alert alert-danger">
+      <h6 class="alert-heading">Please fix the following errors:</h6>
+      <ul class="mb-0">
+        <% user.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="mb-3">
+    <%= form.label :email, class: "form-label" %>
+    <%= form.email_field :email, class: "form-control", required: true %>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <%= form.label :first_name, class: "form-label" %>
+      <%= form.text_field :first_name, class: "form-control", required: true %>
+    </div>
+
+    <div class="col-md-6 mb-3">
+      <%= form.label :last_name, class: "form-label" %>
+      <%= form.text_field :last_name, class: "form-control", required: true %>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <%= form.label :role, class: "form-label" %>
+    <%= form.select :role, 
+        User::ROLES, 
+        {}, 
+        { class: "form-select", required: true } %>
+  </div>
+
+  <hr>
+  <h5 class="text-muted mb-3"><%= user.new_record? ? 'Set Password' : 'Change Password' %></h5>
+  <% unless user.new_record? %>
+    <p class="text-muted">Leave blank if you don't want to change the password.</p>
+  <% end %>
+
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <%= form.label :password, class: "form-label" %>
+      <%= form.password_field :password, 
+                             class: "form-control", 
+                             autocomplete: "new-password",
+                             required: user.new_record? %>
+    </div>
+
+    <div class="col-md-6 mb-3">
+      <%= form.label :password_confirmation, class: "form-label" %>
+      <%= form.password_field :password_confirmation, 
+                             class: "form-control", 
+                             autocomplete: "new-password",
+                             required: user.new_record? %>
+    </div>
+  </div>
+
+  <div class="form-actions mt-4 d-flex gap-2">
+    <%= form.submit user.new_record? ? "Create User" : "Update User", 
+                   class: user.new_record? ? "btn btn-success" : "btn btn-primary" %>
+    <%= link_to "Cancel", admin_users_path, class: "btn btn-outline-secondary" %>
+  </div>
+<% end %>

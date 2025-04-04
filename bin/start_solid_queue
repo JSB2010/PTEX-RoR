@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# Start SolidQueue processes as a background daemon with improved error handling
+
+cd "$(dirname "$0")/.."
+APP_ROOT=$(pwd)
+PID_DIR="$APP_ROOT/tmp/pids"
+LOG_DIR="$APP_ROOT/log"
+
+mkdir -p "$PID_DIR"
+mkdir -p "$LOG_DIR"
+
+# Function to log messages with timestamps
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Function to clean up resources before exit
+cleanup() {
+  log "Cleaning up resources..."
+  # Close any open file descriptors
+  exec 3>&- 4>&- 5>&- 2>/dev/null
+  # Remove temporary files
+  rm -f "$TEMP_LOG" 2>/dev/null
+  log "Cleanup complete"
+}
+
+# Set up trap for clean exit
+trap cleanup EXIT INT TERM
+
+# Check disk space
+log "Checking disk space..."
+DISK_SPACE=$(df -k "$APP_ROOT" | tail -1 | awk '{print $5}' | tr -d '%')
+if [ "$DISK_SPACE" -gt 90 ]; then
+  log "WARNING: Disk space is critically low (${DISK_SPACE}% used)"
+  log "Cleaning up log files..."
+  "$APP_ROOT/bin/clean_logs.sh"
+
+  # Check disk space again after cleanup
+  DISK_SPACE=$(df -k "$APP_ROOT" | tail -1 | awk '{print $5}' | tr -d '%')
+  if [ "$DISK_SPACE" -gt 90 ]; then
+    log "WARNING: Disk space is still critically low (${DISK_SPACE}% used) after cleanup"
+    log "Please free up disk space manually"
+    # Continue anyway, but log the warning
+  fi
+fi
+
+# Kill any existing SolidQueue processes
+log "Checking for existing SolidQueue processes..."
+PKILL_OUTPUT=$(pgrep -f "solid_queue_monitor.rb" || echo "")
+if [ -n "$PKILL_OUTPUT" ]; then
+  log "Killing existing SolidQueue processes: $PKILL_OUTPUT"
+  pkill -f "solid_queue_monitor.rb"
+  sleep 2
+
+  # Double-check that processes are actually killed
+  PKILL_OUTPUT=$(pgrep -f "solid_queue_monitor.rb" || echo "")
+  if [ -n "$PKILL_OUTPUT" ]; then
+    log "Forcefully killing remaining processes: $PKILL_OUTPUT"
+    pkill -9 -f "solid_queue_monitor.rb"
+    sleep 1
+  fi
+fi
+
+# Clean up any stale PID files
+log "Cleaning up stale PID files..."
+find "$PID_DIR" -name "*.pid" -exec rm {} \;
+find "$PID_DIR" -name "*.lock" -exec rm {} \;
+
+# Check if PostgreSQL has too many connections
+log "Checking PostgreSQL connections..."
+PG_CONNECTIONS=$(psql -U jbarkin28 -d postgres -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' ')
+PG_MAX_CONNECTIONS=$(psql -U jbarkin28 -d postgres -t -c "SHOW max_connections;" 2>/dev/null | tr -d ' ')
+
+if [ -n "$PG_CONNECTIONS" ] && [ -n "$PG_MAX_CONNECTIONS" ]; then
+  log "PostgreSQL connections: $PG_CONNECTIONS / $PG_MAX_CONNECTIONS"
+
+  # If we're using more than 80% of available connections, restart PostgreSQL
+  if [ $(($PG_CONNECTIONS * 100 / $PG_MAX_CONNECTIONS)) -gt 80 ]; then
+    log "WARNING: Too many PostgreSQL connections. Cleaning up idle connections..."
+
+    # First try to kill idle connections
+    psql -U jbarkin28 -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND (now() - state_change) > interval '5 minutes';"
+
+    # Check connections again
+    PG_CONNECTIONS=$(psql -U jbarkin28 -d postgres -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' ')
+
+    # If still too many, restart PostgreSQL
+    if [ $(($PG_CONNECTIONS * 100 / $PG_MAX_CONNECTIONS)) -gt 80 ]; then
+      log "WARNING: Still too many PostgreSQL connections. Restarting PostgreSQL..."
+      brew services restart postgresql@14
+      sleep 5
+    fi
+  fi
+fi
+
+# Clean up database records
+log "Cleaning up database records..."
+
+# Process ready jobs first
+log "Processing ready jobs..."
+bin/rails runner "begin; SolidQueue::ReadyExecution.all.each { |e| begin; job = e.job; serialized_job = JSON.parse(job.arguments) rescue nil; job.class_name.constantize.perform_now(*serialized_job['arguments']) if serialized_job && job.active_job_id.present?; job.update!(finished_at: Time.current); e.destroy; rescue => err; puts \"Error: #{err.message}\"; end }; rescue => e; puts \"Error processing ready jobs: #{e.message}\"; end"
+
+# Make sure we clean up any dead processes in the database
+log "Cleaning up stale processes..."
+bin/rails runner "begin; SolidQueue::Process.where(hostname: Socket.gethostname).destroy_all; rescue => e; puts \"Error cleaning up stale processes: #{e.message}\"; end"
+
+# Start the monitoring script with nohup to keep it running even after terminal closes
+log "Starting SolidQueue monitor..."
+
+# Redirect output to a temporary log file first
+TEMP_LOG="$LOG_DIR/solid_queue_monitor_startup.log"
+> "$TEMP_LOG"
+
+# Start with lower resource usage if disk space is low
+if [ "$DISK_SPACE" -gt 90 ]; then
+  log "Starting SolidQueue with reduced resource usage due to low disk space"
+  export RAILS_MAX_THREADS=1
+  export SOLID_QUEUE_CONCURRENCY=1
+fi
+
+# Check if solid_queue_monitor.rb exists
+if [ -f "$APP_ROOT/bin/solid_queue_monitor.rb" ]; then
+  # Start the monitor process
+  log "Starting SolidQueue monitor using solid_queue_monitor.rb..."
+  nohup ruby "$APP_ROOT/bin/solid_queue_monitor.rb" >> "$LOG_DIR/solid_queue_monitor.log" 2>&1 &
+  MONITOR_PID=$!
+else
+  # Fall back to using Rails runner with SolidQueueManager
+  log "solid_queue_monitor.rb not found, using Rails runner with SolidQueueManager..."
+  nohup bin/rails runner "SolidQueueManager.initialize_solid_queue" >> "$LOG_DIR/solid_queue_monitor.log" 2>&1 &
+  MONITOR_PID=$!
+fi
+
+# Make sure the PID file is written
+if [ -n "$MONITOR_PID" ]; then
+  echo $MONITOR_PID > "$PID_DIR/solid_queue_monitor.pid"
+  log "SolidQueue monitor started with PID: $MONITOR_PID"
+else
+  log "ERROR: Failed to get PID for SolidQueue monitor"
+  exit 1
+fi
+
+# Wait a moment to make sure it's running
+sleep 3
+
+# Verify that the process is still running
+if ps -p $MONITOR_PID > /dev/null; then
+  log "SolidQueue monitor is running successfully (PID: $MONITOR_PID)"
+  log "See logs at $LOG_DIR/solid_queue_monitor.log"
+else
+  log "ERROR: SolidQueue monitor failed to start"
+  log "Check the logs at $LOG_DIR/solid_queue_monitor.log for details"
+  tail -n 20 "$LOG_DIR/solid_queue_monitor.log"
+  exit 1
+fi
+
+# We'll skip setting up the cron job to avoid potential issues
+log "SolidQueue monitoring will be handled by the Rails server"
+
+log "SolidQueue startup completed successfully"

@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require File.expand_path('../config/environment', __dir__)
+
+# Define standard queues for the application
+STANDARD_QUEUES = %w[default mailers active_storage maintenance]
+
+puts "Initializing SolidQueue..."
+
+# Load configuration
+config = if File.exist?(Rails.root.join('config', 'queue.yml'))
+  YAML.load_file(Rails.root.join('config', 'queue.yml'), aliases: true)[Rails.env]
+else
+  { 'queues' => STANDARD_QUEUES }
+end
+
+# Make sure we have a clean slate
+SolidQueue::Process.where(hostname: Socket.gethostname).find_each(&:deregister)
+
+# Initialize each queue from configuration
+queues_to_init = (config['queues'] || STANDARD_QUEUES).map { |q| q.is_a?(Hash) ? q['name'] : q }.uniq
+
+queues_to_init.each do |queue_name|
+  # Check if queue exists
+  exists = SolidQueue::Job.where(queue_name: queue_name).exists? ||
+           SolidQueue::ReadyExecution.where(queue_name: queue_name).exists?
+  
+  next if exists
+  
+  puts "Creating queue '#{queue_name}'..."
+  
+  # Create a dummy job to ensure the queue exists
+  job = SolidQueue::Job.create!(
+    queue_name: queue_name,
+    class_name: 'QueueInitializer',
+    arguments: { init: true }.to_json
+  )
+  
+  # Mark it as finished immediately
+  job.update!(finished_at: Time.current)
+end
+
+# Load recurring tasks if configured
+puts "Setting up recurring tasks..."
+
+recurring_config_path = Rails.root.join('config', 'recurring.yml')
+if File.exist?(recurring_config_path)
+  recurring_yaml = YAML.load_file(recurring_config_path, aliases: true)
+  recurring_config = recurring_yaml[Rails.env]
+  
+  if recurring_config
+    recurring_config.each do |key, config|
+      next unless config['enabled']
+      
+      puts "Setting up recurring task '#{key}'..."
+      task = SolidQueue::RecurringTask.find_or_create_by!(key: key) do |t|
+        if config['method']
+          t.command = "#{config['class']}.#{config['method']}"
+        else
+          t.class_name = config['class']
+        end
+        
+        t.arguments = config['args']&.to_json
+        t.schedule = config['cron']
+        t.queue_name = config['queue'] || 'default'
+        t.priority = config['priority'] || 0
+        t.description = config['description']
+      end
+    end
+  end
+end
+
+puts "Queue initialization complete!"

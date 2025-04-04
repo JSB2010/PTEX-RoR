@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Start the Rails server with all necessary services
+
+# Function to log messages with timestamps
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Start PostgreSQL if it's not running
+log "Checking PostgreSQL status..."
+if ! pg_isready -q; then
+  log "Starting PostgreSQL..."
+  brew services start postgresql@14
+  
+  # Wait for PostgreSQL to start with a timeout
+  start_time=$(date +%s)
+  pg_started=false
+  
+  while [ $(($(date +%s) - start_time)) -lt 30 ]; do
+    sleep 1
+    if pg_isready -q; then
+      pg_started=true
+      break
+    fi
+  done
+  
+  if [ "$pg_started" = false ]; then
+    log "ERROR: Failed to start PostgreSQL within timeout. Please start it manually."
+    exit 1
+  fi
+  
+  log "PostgreSQL started successfully."
+else
+  log "PostgreSQL is already running."
+fi
+
+# Start Redis if it's not running
+log "Checking Redis status..."
+if ! redis-cli ping > /dev/null 2>&1; then
+  log "Starting Redis..."
+  brew services start redis
+  
+  # Wait for Redis to start with a timeout
+  start_time=$(date +%s)
+  redis_started=false
+  
+  while [ $(($(date +%s) - start_time)) -lt 20 ]; do
+    sleep 1
+    if redis-cli ping > /dev/null 2>&1; then
+      redis_started=true
+      break
+    fi
+  done
+  
+  if [ "$redis_started" = false ]; then
+    log "ERROR: Failed to start Redis within timeout. Please start it manually."
+    exit 1
+  fi
+  
+  log "Redis started successfully."
+else
+  log "Redis is already running."
+fi
+
+# Kill any existing SolidQueue processes
+log "Checking for existing SolidQueue processes..."
+pkill_output=$(pgrep -f "solid_queue_monitor.rb" || echo "")
+if [ -n "$pkill_output" ]; then
+  log "Killing existing SolidQueue processes: $pkill_output"
+  pkill -f solid_queue_monitor.rb
+  sleep 2
+  
+  # Double-check that processes are actually killed
+  pkill_output=$(pgrep -f "solid_queue_monitor.rb" || echo "")
+  if [ -n "$pkill_output" ]; then
+    log "Forcefully killing remaining processes: $pkill_output"
+    pkill -9 -f solid_queue_monitor.rb
+    sleep 1
+  fi
+fi
+
+# Clean up any stale PID files
+log "Cleaning up stale PID files..."
+find tmp/pids -name "*.pid" -delete 2>/dev/null || true
+find tmp/pids -name "*.lock" -delete 2>/dev/null || true
+
+# Clean up stale processes in the database
+log "Cleaning up database records..."
+bin/rails runner 'begin; SolidQueue::Process.where(hostname: Socket.gethostname).destroy_all; rescue => e; puts "Error cleaning up stale processes: #{e.message}"; end'
+
+# Start SolidQueue in a separate process
+log "Starting SolidQueue..."
+mkdir -p tmp/pids log
+nohup ruby bin/solid_queue_monitor.rb >> log/solid_queue_monitor.log 2>&1 &
+SOLID_QUEUE_PID=$!
+echo $SOLID_QUEUE_PID > tmp/pids/solid_queue_monitor.pid
+log "SolidQueue started with PID: $SOLID_QUEUE_PID"
+
+# Wait a moment to make sure it's running
+sleep 3
+
+# Verify that the process is still running
+if ps -p $SOLID_QUEUE_PID > /dev/null; then
+  log "SolidQueue is running successfully (PID: $SOLID_QUEUE_PID)"
+else
+  log "WARNING: SolidQueue may not have started properly. Check logs for details."
+fi
+
+# Start the Rails server
+log "Starting Rails server..."
+exec bundle exec rails server "$@"

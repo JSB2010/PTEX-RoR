@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Start the Rails server directly without any SolidQueue
+
+# Set environment variable to skip SolidQueue
+export SKIP_SOLID_QUEUE=true
+
+# Start the Rails server
+echo "Starting Rails server..."
+exec bundle exec rails server "$@"

@@ -1,0 +1,12 @@
+<% content_for :page_title do %>
+  Add New User
+<% end %>
+
+<div class="card">
+  <div class="card-header">
+    <h5 class="mb-0">User Information</h5>
+  </div>
+  <div class="card-body">
+    <%= render 'form', user: @user %>
+  </div>
+</div>

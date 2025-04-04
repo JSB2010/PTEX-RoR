@@ -1,0 +1,175 @@
+<%# Teacher Dashboard %>
+<% if current_user.teacher? %>
+  <div class="container-fluid py-4">
+    <h2 class="mb-4">Teacher Dashboard</h2>
+    
+    <!-- Teaching Overview -->
+    <div class="row">
+      <div class="col-md-4 mb-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="card-title">Teaching Stats</h5>
+            <p class="h2 mb-0"><%= @courses.size %></p>
+            <p class="text-muted">Active Courses</p>
+            <p class="h2 mb-0"><%= @total_students %></p>
+            <p class="text-muted">Total Students</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Course Quick View -->
+      <div class="col-md-8 mb-4">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h5 class="card-title">Course Overview</h5>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Course Name</th>
+                    <th>Students</th>
+                    <th>Class Average</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @courses.each do |course| %>
+                    <tr>
+                      <td><%= course.name %></td>
+                      <td><%= course.student_count %></td>
+                      <td>
+                        <% if course.avg_grade && course.avg_grade > 0 %>
+                          <%= number_with_precision(course.avg_grade, precision: 1) %>%
+                        <% else %>
+                          N/A
+                        <% end %>
+                      </td>
+                      <td>
+                        <%= link_to 'View Details', course_path(course), class: 'btn btn-sm btn-primary' %>
+                      </td>
+                    </tr>
+                  <% end %>
+                  <% if @courses.empty? %>
+                    <tr>
+                      <td colspan="4" class="text-center text-muted py-4">
+                        <i class="bi bi-book h4 d-block mb-2"></i>
+                        No courses available
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title">Quick Actions</h5>
+            <div class="d-flex gap-2">
+              <%= link_to new_course_path, class: 'btn btn-primary' do %>
+                <i class="bi bi-plus-circle me-1"></i> Create New Course
+              <% end %>
+              <%= link_to courses_path, class: 'btn btn-outline-primary' do %>
+                <i class="bi bi-grid me-1"></i> Manage All Courses
+              <% end %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<% else %>
+  <div class="container mt-4">
+    <h1 class="mb-4">Student Dashboard</h1>
+    
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5 class="card-title">GPA Overview</h5>
+            <div class="row">
+              <div class="col-6">
+                <p class="text-muted mb-1">Unweighted GPA</p>
+                <h3><%= number_with_precision(@unweighted_gpa, precision: 2) %></h3>
+              </div>
+              <div class="col-6">
+                <p class="text-muted mb-1">Weighted GPA</p>
+                <h3><%= number_with_precision(@weighted_gpa, precision: 2) %></h3>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5 class="card-title">Honors & AP Courses</h5>
+            <% if @honors_ap_courses.any? %>
+              <ul class="list-group list-group-flush">
+                <% @honors_ap_courses.each do |course| %>
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <%= course.name %>
+                    <span class="badge bg-primary"><%= course.level %></span>
+                  </li>
+                <% end %>
+              </ul>
+            <% else %>
+              <p class="text-muted">No Honors or AP courses enrolled.</p>
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Current Courses</h5>
+            <%= render partial: 'courses/student_course_list', locals: { courses: @courses } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<% end %>
+
+<% content_for :styles do %>
+<style>
+  .grades-container {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+  }
+
+  .grades-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+  }
+
+  .grades-table th,
+  .grades-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .grades-table th {
+    background-color: #f5f5f5;
+    font-weight: bold;
+  }
+
+  .gpa-display {
+    margin-top: 30px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    text-align: center;
+  }
+</style>
+<% end %>
