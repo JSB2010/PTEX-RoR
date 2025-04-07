@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+# Script to update the heartbeats of SolidQueue processes
+
+require 'fileutils'
+require 'socket'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Updating heartbeats of SolidQueue processes..."
+
+# Load Rails environment
+require File.join(app_root, 'config', 'environment')
+
+# Update heartbeats of processes from this host
+if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
+  hostname = Socket.gethostname
+  processes = SolidQueue::Process.where(hostname: hostname)
+  
+  if processes.any?
+    processes.each do |process|
+      if system("ps -p #{process.pid} > /dev/null")
+        puts "Updating heartbeat for #{process.kind} process with PID: #{process.pid}"
+        process.update_heartbeat!
+      else
+        puts "Process #{process.kind} with PID: #{process.pid} is not running, deregistering"
+        process.destroy
+      end
+    end
+  else
+    puts "No SolidQueue processes found for host: #{hostname}"
+  end
+else
+  puts "SolidQueue tables not found"
+end
+
+puts "SolidQueue heartbeats updated."

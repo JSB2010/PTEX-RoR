@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+# Foreman server script for Rails
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
+
+# Create a Procfile.dev file
+cat > Procfile.dev << EOL
+web: bundle exec puma -p 3003
+worker: bundle exec rails runner "SolidQueue::Worker.new(concurrency: 1).start"
+dispatcher: bundle exec rails runner "SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start"
+EOL
+
+# Start the server using foreman
+echo "Starting Rails server using foreman..."
+exec bundle exec foreman start -f Procfile.dev

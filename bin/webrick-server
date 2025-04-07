@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# WEBrick server script for Rails
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
+
+# Start the Rails server directly
+echo "Starting Rails server with WEBrick..."
+exec bundle exec rails server -u webrick -p 3004 -b 0.0.0.0

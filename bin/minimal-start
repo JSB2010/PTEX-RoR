@@ -1,0 +1,52 @@
+#!/usr/bin/env ruby
+# Minimal script to start the server
+
+require 'fileutils'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Clean up any stale PID files
+Dir.glob('tmp/pids/*.pid').each { |f| File.delete(f) }
+Dir.glob('tmp/pids/*.lock').each { |f| File.delete(f) }
+
+# Kill any existing Rails processes
+system('pkill -f "rails runner"')
+system('pkill -f "SolidQueue::Dispatcher"')
+system('pkill -f "SolidQueue::Worker"')
+
+# Clean up database tables
+system("bundle exec rails runner \"begin; ActiveRecord::Base.connection.execute('DELETE FROM solid_queue_processes') rescue nil; end\"")
+
+# Start PostgreSQL if it's not running
+unless system('pg_isready -q')
+  puts "Starting PostgreSQL..."
+  system('brew services start postgresql@14')
+  sleep 3
+end
+
+# Start Redis if it's not running
+unless system('redis-cli ping > /dev/null 2>&1')
+  puts "Starting Redis..."
+  system('brew services start redis')
+  sleep 2
+end
+
+# Set environment variables for optimal performance
+ENV['RAILS_MAX_THREADS'] = '5'
+ENV['RAILS_MIN_THREADS'] = '1'
+ENV['WEB_CONCURRENCY'] = '0' # No workers in development
+ENV['MALLOC_ARENA_MAX'] = '2' # Reduce memory usage
+ENV['RAILS_SERVER_STARTED'] = 'true'
+
+# Create a file to enable caching in development
+FileUtils.touch('tmp/caching-dev.txt')
+
+# Start the Rails server
+puts "Starting Rails server..."
+exec "bundle exec rails server"

@@ -1,0 +1,50 @@
+#!/usr/bin/env ruby
+# Super minimal script to start the server
+
+require 'fileutils'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Clean up any stale PID files
+Dir.glob('tmp/pids/*.pid').each { |f| File.delete(f) }
+Dir.glob('tmp/pids/*.lock').each { |f| File.delete(f) }
+
+# Kill any existing Rails processes
+system('pkill -f "rails runner"')
+system('pkill -f "SolidQueue::Dispatcher"')
+system('pkill -f "SolidQueue::Worker"')
+
+# Remove all optimization initializers
+system('mv config/initializers/gem_optimization.rb config/initializers/gem_optimization.rb.bak') if File.exist?('config/initializers/gem_optimization.rb')
+system('mv config/initializers/redis_optimization.rb config/initializers/redis_optimization.rb.bak') if File.exist?('config/initializers/redis_optimization.rb')
+system('mv config/initializers/application_optimization.rb config/initializers/application_optimization.rb.bak') if File.exist?('config/initializers/application_optimization.rb')
+system('mv config/initializers/active_record_optimization.rb config/initializers/active_record_optimization.rb.bak') if File.exist?('config/initializers/active_record_optimization.rb')
+system('mv config/initializers/gc_optimization.rb config/initializers/gc_optimization.rb.bak') if File.exist?('config/initializers/gc_optimization.rb')
+system('mv config/initializers/solid_queue_optimization.rb config/initializers/solid_queue_optimization.rb.bak') if File.exist?('config/initializers/solid_queue_optimization.rb')
+
+# Start PostgreSQL if it's not running
+unless system('pg_isready -q')
+  puts "Starting PostgreSQL..."
+  system('brew services start postgresql@14')
+  sleep 3
+end
+
+# Start Redis if it's not running
+unless system('redis-cli ping > /dev/null 2>&1')
+  puts "Starting Redis..."
+  system('brew services start redis')
+  sleep 2
+end
+
+# Set environment variables
+ENV['RAILS_SERVER_STARTED'] = 'true'
+
+# Start the Rails server
+puts "Starting Rails server..."
+exec "bundle exec rails server"

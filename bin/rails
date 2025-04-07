@@ -1,9 +1,43 @@
 #!/usr/bin/env ruby
+# Rails command script with custom server setup
 
 # Check if this is a server command
 if ARGV.first == 'server' || ARGV.first == 's'
-  # Use our auto-starting Rails server script
-  exec(File.expand_path('../rails-server-auto', __FILE__), *ARGV[1..-1])
+  # Set default port to 3000
+  unless ARGV.include?('-p') || ARGV.include?('--port')
+    ARGV.push('-p', '3000')
+  end
+
+  # Use WEBrick as the server
+  unless ARGV.include?('-u') || ARGV.include?('--using')
+    ARGV.push('-u', 'webrick')
+  end
+
+  # Start PostgreSQL if it's not running
+  unless system('pg_isready -q')
+    puts "Starting PostgreSQL..."
+    system('brew services start postgresql@14')
+    sleep 3
+  end
+
+  # Start Redis if it's not running
+  unless system('redis-cli ping > /dev/null 2>&1')
+    puts "Starting Redis..."
+    system('brew services start redis')
+    sleep 2
+  end
+
+  # Start SolidQueue
+  solid_queue_script = File.expand_path('../start-solid-queue', __FILE__)
+  if File.exist?(solid_queue_script)
+    puts "Starting SolidQueue..."
+    system(solid_queue_script)
+  end
+
+  # Continue with standard Rails server command
+  APP_PATH = File.expand_path('../config/application', __dir__)
+  require_relative "../config/boot"
+  require "rails/commands"
 else
   # For all other commands, use the standard Rails command
   APP_PATH = File.expand_path('../config/application', __dir__)

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+# System server script for Rails
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
+
+# Start PostgreSQL if it's not running
+if ! pg_isready -q; then
+  echo "Starting PostgreSQL..."
+  brew services start postgresql@14
+  sleep 3
+fi
+
+# Start Redis if it's not running
+if ! redis-cli ping > /dev/null 2>&1; then
+  echo "Starting Redis..."
+  brew services start redis
+  sleep 2
+fi
+
+# Clean up any existing SolidQueue processes
+pkill -f "SolidQueue::Dispatcher" 2>/dev/null || true
+pkill -f "SolidQueue::Worker" 2>/dev/null || true
+
+# Start SolidQueue
+echo "Starting SolidQueue..."
+bundle exec rails runner "SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start" > log/solid_queue_dispatcher.log 2>&1 &
+DISPATCHER_PID=$!
+echo "SolidQueue dispatcher started with PID: $DISPATCHER_PID"
+
+bundle exec rails runner "SolidQueue::Worker.new(concurrency: 1).start" > log/solid_queue_worker.log 2>&1 &
+WORKER_PID=$!
+echo "SolidQueue worker started with PID: $WORKER_PID"
+
+# Start the Rails server
+echo "Starting Rails server..."
+bundle exec rails server

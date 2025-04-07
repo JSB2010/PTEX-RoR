@@ -1,58 +1,63 @@
 #!/usr/bin/env bash
-# Script to start all services
+# Script to start all components: PostgreSQL, Redis, SolidQueue, and Rails server
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
 
 # Function to log messages with timestamps
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Change to the Rails root directory
-cd "$(dirname "$0")/.."
-APP_ROOT=$(pwd)
+# Function to clean up resources before exit
+cleanup() {
+  log "Cleaning up resources..."
+  
+  # Kill SolidQueue processes
+  pkill -f "SolidQueue::Dispatcher" 2>/dev/null || true
+  pkill -f "SolidQueue::Worker" 2>/dev/null || true
+  
+  log "Cleanup complete"
+}
 
-log "Starting all services..."
+# Set up trap for clean exit
+trap cleanup EXIT INT TERM
 
-# Start PostgreSQL if not running
-log "Checking PostgreSQL..."
+# Start PostgreSQL if it's not running
+log "Checking PostgreSQL status..."
 if ! pg_isready -q; then
   log "Starting PostgreSQL..."
   brew services start postgresql@14
-  sleep 5
-  
-  if ! pg_isready -q; then
-    log "ERROR: Failed to start PostgreSQL."
-    exit 1
-  fi
-  
-  log "PostgreSQL started successfully."
+  sleep 3
 else
   log "PostgreSQL is already running."
 fi
 
-# Start Redis if not running
-log "Checking Redis..."
+# Start Redis if it's not running
+log "Checking Redis status..."
 if ! redis-cli ping > /dev/null 2>&1; then
   log "Starting Redis..."
   brew services start redis
-  sleep 3
-  
-  if ! redis-cli ping > /dev/null 2>&1; then
-    log "ERROR: Failed to start Redis."
-    exit 1
-  fi
-  
-  log "Redis started successfully."
+  sleep 2
 else
   log "Redis is already running."
 fi
 
-# Initialize database if needed
-log "Initializing database..."
-if ! "$APP_ROOT/bin/db-init"; then
-  log "ERROR: Database initialization failed."
-  exit 1
-fi
+# Clean up any existing SolidQueue processes
+log "Cleaning up existing SolidQueue processes..."
+pkill -f "SolidQueue::Dispatcher" 2>/dev/null || true
+pkill -f "SolidQueue::Worker" 2>/dev/null || true
 
-log "All services started successfully!"
-log "You can now run 'bin/rails server' to start the Rails server."
-exit 0
+# Start SolidQueue
+log "Starting SolidQueue..."
+bundle exec rails runner "SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start" > log/solid_queue_dispatcher.log 2>&1 &
+DISPATCHER_PID=$!
+log "SolidQueue dispatcher started with PID: $DISPATCHER_PID"
+
+bundle exec rails runner "SolidQueue::Worker.new(concurrency: 1).start" > log/solid_queue_worker.log 2>&1 &
+WORKER_PID=$!
+log "SolidQueue worker started with PID: $WORKER_PID"
+
+# Start the Rails server
+log "Starting Rails server..."
+bundle exec rails server

@@ -1,0 +1,67 @@
+#!/usr/bin/env ruby
+# Script to register SolidQueue processes in the database
+
+require 'fileutils'
+require 'socket'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Registering SolidQueue processes in the database..."
+
+# Load Rails environment
+require File.join(app_root, 'config', 'environment')
+
+# Clean up any existing processes from this host
+if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
+  hostname = Socket.gethostname
+  puts "Cleaning up existing SolidQueue processes for host: #{hostname}"
+  SolidQueue::Process.where(hostname: hostname).destroy_all
+  
+  # Clean up claimed executions with no process
+  SolidQueue::ClaimedExecution
+    .joins('LEFT JOIN solid_queue_processes ON solid_queue_processes.id = process_id')
+    .where('solid_queue_processes.id IS NULL')
+    .delete_all
+end
+
+# Read the dispatcher PID
+dispatcher_pid_file = File.join(app_root, 'tmp', 'pids', 'solid_queue_dispatcher.pid')
+if File.exist?(dispatcher_pid_file)
+  dispatcher_pid = File.read(dispatcher_pid_file).to_i
+  if dispatcher_pid > 0 && system("ps -p #{dispatcher_pid} > /dev/null")
+    puts "Registering dispatcher process with PID: #{dispatcher_pid}"
+    SolidQueue::Process.register(
+      kind: "Dispatcher",
+      name: "dispatcher-#{Socket.gethostname}",
+      pid: dispatcher_pid,
+      metadata: { polling_interval: 5 }
+    )
+  else
+    puts "Dispatcher process not found"
+  end
+else
+  puts "Dispatcher PID file not found"
+end
+
+# Read the worker PID
+worker_pid_file = File.join(app_root, 'tmp', 'pids', 'solid_queue_worker.pid')
+if File.exist?(worker_pid_file)
+  worker_pid = File.read(worker_pid_file).to_i
+  if worker_pid > 0 && system("ps -p #{worker_pid} > /dev/null")
+    puts "Registering worker process with PID: #{worker_pid}"
+    SolidQueue::Process.register(
+      kind: "Worker",
+      name: "worker-#{Socket.gethostname}",
+      pid: worker_pid,
+      metadata: { concurrency: 1, queues: ["default"] }
+    )
+  else
+    puts "Worker process not found"
+  end
+else
+  puts "Worker PID file not found"
+end
+
+puts "SolidQueue processes registered."

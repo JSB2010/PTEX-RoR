@@ -22,7 +22,7 @@ class SolidQueueMonitor
     setup_signal_handlers
 
     register_processes
-    
+
     while @running
       with_connection_handling do
         check_health
@@ -85,7 +85,7 @@ class SolidQueueMonitor
 
   def register_processes
     Rails.logger.info "Registering SolidQueue processes..."
-    
+
     with_connection_handling do
       @worker_process = SolidQueue::Process.register(
         kind: "Worker",
@@ -114,11 +114,11 @@ class SolidQueueMonitor
 
   def check_health
     Rails.logger.info "Performing health check..."
-    
+
     worker_count = SolidQueue::Process.where(kind: "Worker")
                                     .where("last_heartbeat_at > ?", PROCESS_TIMEOUT.ago)
                                     .count
-                                    
+
     dispatcher_count = SolidQueue::Process.where(kind: "Dispatcher")
                                         .where("last_heartbeat_at > ?", PROCESS_TIMEOUT.ago)
                                         .count
@@ -132,8 +132,9 @@ class SolidQueueMonitor
     stuck_jobs = SolidQueue::Job.joins(:claimed_execution)
                                .where("solid_queue_jobs.created_at < ?", 1.hour.ago)
                                .where(finished_at: nil)
+                               .where(failed_at: nil)
                                .limit(100)  # Limit to prevent memory issues
-    
+
     if stuck_jobs.any?
       Rails.logger.warn "Found #{stuck_jobs.count} potentially stuck jobs"
       stuck_jobs.each do |job|
@@ -154,7 +155,7 @@ class SolidQueueMonitor
   def attempt_restart
     @restart_attempts += 1
     Rails.logger.info "Attempting to restart SolidQueue processes (attempt #{@restart_attempts}/#{MAX_RESTART_ATTEMPTS})"
-    
+
     system("bundle exec rake solid_queue:stop")
     sleep 2
     system("bundle exec rake solid_queue:start")

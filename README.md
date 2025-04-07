@@ -1,24 +1,69 @@
-# README
+# PTEX-RoR Application
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+This is a Ruby on Rails application with PostgreSQL, Redis, and SolidQueue for background job processing.
 
-Things you may want to cover:
+## System Requirements
 
-* Ruby version
+* Ruby 3.2.2
+* PostgreSQL 14
+* Redis 7.0+
 
-* System dependencies
+## Getting Started
 
-* Configuration
+### Starting the Server
 
-* Database creation
+To start the server with all components (web server, PostgreSQL, Redis, and SolidQueue), use:
 
-* Database initialization
+```bash
+bin/start-all
+```
 
-* How to run the test suite
+This will:
+1. Start PostgreSQL if it's not running
+2. Start Redis if it's not running
+3. Start SolidQueue for background job processing
+4. Start the Rails web server
 
-* Services (job queues, cache servers, search engines, etc.)
+You can also use the standard Rails server command, but you'll need to start the other components manually:
 
-* Deployment instructions
+```bash
+# Start PostgreSQL
+brew services start postgresql@14
 
-* ...
+# Start Redis
+brew services start redis
+
+# Start SolidQueue
+bin/start-solid-queue
+
+# Start Rails server
+bin/rails server
+```
+
+## Services
+
+### SolidQueue
+
+SolidQueue is used for background job processing. It consists of two components:
+
+1. Dispatcher - Schedules jobs to be executed
+2. Worker - Executes the jobs
+
+You can start SolidQueue using the `bin/start-solid-queue` script.
+
+### PostgreSQL
+
+The application uses PostgreSQL for the database. Make sure PostgreSQL is installed and running.
+
+### Redis
+
+Redis is used for caching and as a backend for SolidQueue. Make sure Redis is installed and running.
+
+## Troubleshooting
+
+If you encounter issues with the server not starting properly, try these steps:
+
+1. Make sure PostgreSQL is running: `pg_isready`
+2. Make sure Redis is running: `redis-cli ping`
+3. Kill any existing SolidQueue processes: `pkill -f "SolidQueue"`
+4. Start the server using the `bin/start-all` script

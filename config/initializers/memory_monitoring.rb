@@ -1,9 +1,10 @@
+# frozen_string_literal: true
 require 'objspace'
 
 # Enable memory profiling in production
 ObjectSpace.trace_object_allocations_start if Rails.env.production?
 
-# Configure memory monitoring
+# Configure memory monitoring and optimization
 module MemoryMonitoring
   class << self
     def memory_stats
@@ -34,7 +35,7 @@ module MemoryMonitoring
       if memory_usage > threshold
         stats = memory_stats
         Rails.logger.warn("High memory usage detected: #{stats.to_json}")
-        
+
         if defined?(Sentry)
           Sentry.capture_message(
             "High memory usage detected",
@@ -68,7 +69,7 @@ module MemoryMonitoring
         if obj.respond_to?(:object_id) && !obj.frozen?
           location = ObjectSpace.allocation_sourcefile(obj)
           next unless location && location.include?(Rails.root.to_s)
-          
+
           key = "#{location}:#{ObjectSpace.allocation_sourceline(obj)}"
           retained[key] += 1
         end
@@ -95,7 +96,7 @@ module MemoryMonitoring
         before_gc = current_usage
         GC.start(full_mark: true, immediate_sweep: true)
         after_gc = `ps -o rss= -p #{Process.pid}`.to_i / 1024
-        
+
         gc_stats = {
           before_mb: before_gc,
           after_mb: after_gc,
@@ -105,7 +106,7 @@ module MemoryMonitoring
         }
 
         Rails.logger.info("GC completed: #{gc_stats.to_json}")
-        
+
         if after_gc > (threshold * 1.3)
           Sentry.capture_message(
             "Memory remains high after GC",
@@ -118,84 +119,130 @@ module MemoryMonitoring
   end
 end
 
-# Set up periodic memory monitoring in production
-if Rails.env.production?
-  Rails.application.config.after_initialize do
-    # Enable garbage collection profiling
-    GC::Profiler.enable
+# Configure garbage collection
+if defined?(GC) && GC.respond_to?(:configure)
+  # Optimize garbage collection settings
+  GC.configure(
+    # Increase the initial heap slots to reduce GC frequency
+    heap_init_slots: ENV.fetch('GC_HEAP_INIT_SLOTS', 600_000).to_i,
+    # Set the heap growth factor
+    heap_growth_factor: ENV.fetch('GC_HEAP_GROWTH_FACTOR', 1.25).to_f,
+    # Set the heap free slots ratio
+    heap_free_slots_min_ratio: ENV.fetch('GC_HEAP_FREE_SLOTS_MIN_RATIO', 0.20).to_f,
+    # Set the heap free slots goal ratio
+    heap_free_slots_goal_ratio: ENV.fetch('GC_HEAP_FREE_SLOTS_GOAL_RATIO', 0.40).to_f,
+    # Set the old objects limit
+    old_objects_limit: ENV.fetch('GC_OLD_OBJECTS_LIMIT', 250_000).to_i,
+    # Enable incremental GC
+    use_rgengc: true,
+    # Enable incremental marking
+    use_marking: true
+  )
 
-    # Monitor memory usage every 5 minutes
+  # Set memory limits if supported
+  if GC.respond_to?(:malloc_limit=)
+    # Set the malloc limit to 64MB in development (adjust as needed)
+    GC.malloc_limit = ENV.fetch('MALLOC_LIMIT', 64_000_000).to_i
+  end
+
+  # Run garbage collection on startup to clean up memory
+  GC.start
+end
+
+# Set up memory monitoring in production and development
+if Rails.env.production? || Rails.env.development?
+  Rails.application.config.after_initialize do
+    # Enable garbage collection profiling in production
+    GC::Profiler.enable if Rails.env.production?
+
+    # Monitor memory usage periodically
     Thread.new do
       loop do
         begin
-          MemoryMonitoring.check_memory_threshold
+          MemoryMonitoring.check_memory_threshold if Rails.env.production?
+
+          # Get memory usage
+          memory_usage = `ps -o rss= -p #{Process.pid}`.to_i / 1024
+          Rails.logger.info "Memory usage: #{memory_usage} MB at #{Time.now}"
+
+          # Force garbage collection if memory usage is too high
+          if memory_usage > ENV.fetch('MEMORY_THRESHOLD_MB', 500).to_i
+            Rails.logger.warn "Memory usage exceeded threshold (#{memory_usage} MB). Running garbage collection..."
+            GC.start
+
+            # Get memory usage after garbage collection
+            new_memory_usage = `ps -o rss= -p #{Process.pid}`.to_i / 1024
+            Rails.logger.info "Memory usage after garbage collection: #{new_memory_usage} MB (reduced by #{memory_usage - new_memory_usage} MB)"
+          end
         rescue => e
           Rails.logger.error("Memory monitoring failed: #{e.message}")
           Sentry.capture_exception(e) if defined?(Sentry)
         ensure
-          sleep 300
+          sleep ENV.fetch('MEMORY_CHECK_INTERVAL', 300).to_i
         end
       end
     end
 
     # Track memory statistics around each request in production
-    ActiveSupport::Notifications.subscribe "process_action.action_controller" do |*args|
-      event = ActiveSupport::Notifications::Event.new(*args)
-      
-      if rand < 0.1 # Sample 10% of requests
-        stats = MemoryMonitoring.memory_stats.merge(
-          controller: event.payload[:controller],
-          action: event.payload[:action],
-          path: event.payload[:path],
-          format: event.payload[:format],
-          method: event.payload[:method],
-          status: event.payload[:status],
-          duration: event.duration,
-          view_runtime: event.payload[:view_runtime],
-          db_runtime: event.payload[:db_runtime]
-        )
+    if Rails.env.production?
+      ActiveSupport::Notifications.subscribe "process_action.action_controller" do |*args|
+        event = ActiveSupport::Notifications::Event.new(*args)
 
-        Rails.logger.info("Request memory profile: #{stats.to_json}")
+        if rand < 0.1 # Sample 10% of requests
+          stats = MemoryMonitoring.memory_stats.merge(
+            controller: event.payload[:controller],
+            action: event.payload[:action],
+            path: event.payload[:path],
+            format: event.payload[:format],
+            method: event.payload[:method],
+            status: event.payload[:status],
+            duration: event.duration,
+            view_runtime: event.payload[:view_runtime],
+            db_runtime: event.payload[:db_runtime]
+          )
 
-        if stats[:memory_usage_mb] > ENV.fetch('REQUEST_MEMORY_THRESHOLD_MB', 512).to_i
-          Sentry.capture_message(
-            "High memory usage in request",
-            level: 'warning',
-            extra: stats
-          ) if defined?(Sentry)
+          Rails.logger.info("Request memory profile: #{stats.to_json}")
+
+          if stats[:memory_usage_mb] > ENV.fetch('REQUEST_MEMORY_THRESHOLD_MB', 512).to_i
+            Sentry.capture_message(
+              "High memory usage in request",
+              level: 'warning',
+              extra: stats
+            ) if defined?(Sentry)
+          end
         end
       end
-    end
 
-    # Monitor GC activity and collect profiling data
-    Thread.new do
-      loop do
-        begin
-          if GC::Profiler.total_time > 0
-            profile_data = {
-              gc_time: GC::Profiler.total_time,
-              gc_stats: GC.stat,
-              gc_profile: GC::Profiler.raw_data.last(5),
-              memory_stats: MemoryMonitoring.memory_stats
-            }
+      # Monitor GC activity and collect profiling data
+      Thread.new do
+        loop do
+          begin
+            if GC::Profiler.total_time > 0
+              profile_data = {
+                gc_time: GC::Profiler.total_time,
+                gc_stats: GC.stat,
+                gc_profile: GC::Profiler.raw_data.last(5),
+                memory_stats: MemoryMonitoring.memory_stats
+              }
 
-            Rails.logger.info("GC profile: #{profile_data.to_json}")
-            
-            if GC::Profiler.total_time > 5.0 # More than 5 seconds
-              Sentry.capture_message(
-                "High GC overhead detected",
-                level: 'warning',
-                extra: profile_data
-              ) if defined?(Sentry)
+              Rails.logger.info("GC profile: #{profile_data.to_json}")
+
+              if GC::Profiler.total_time > 5.0 # More than 5 seconds
+                Sentry.capture_message(
+                  "High GC overhead detected",
+                  level: 'warning',
+                  extra: profile_data
+                ) if defined?(Sentry)
+              end
+
+              GC::Profiler.clear
             end
-
-            GC::Profiler.clear
+          rescue => e
+            Rails.logger.error("GC profiling failed: #{e.message}")
+            Sentry.capture_exception(e) if defined?(Sentry)
+          ensure
+            sleep 300
           end
-        rescue => e
-          Rails.logger.error("GC profiling failed: #{e.message}")
-          Sentry.capture_exception(e) if defined?(Sentry)
-        ensure
-          sleep 300
         end
       end
     end

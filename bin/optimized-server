@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# Optimized Rails server script that handles all startup logic efficiently
+
+# Function to log messages with timestamps
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Function to clean up resources before exit
+cleanup() {
+  log "Cleaning up resources..."
+
+  # Kill SolidQueue processes if they were started by this script
+  if [ -n "$SOLID_QUEUE_PID" ]; then
+    log "Stopping SolidQueue processes..."
+    for pid in $SOLID_QUEUE_PID; do
+      log "Stopping SolidQueue process (PID: $pid)..."
+      kill -TERM $pid 2>/dev/null || true
+    done
+  fi
+
+  # Remove PID files
+  rm -f tmp/pids/solid_queue_*.pid 2>/dev/null || true
+
+  # Clean up database
+  log "Cleaning up SolidQueue database records..."
+  bundle exec rails runner "begin; ActiveRecord::Base.connection.execute('DELETE FROM solid_queue_processes') rescue nil; end" 2>/dev/null || true
+
+  log "Cleanup complete"
+}
+
+# Set up trap for clean exit
+trap cleanup EXIT INT TERM
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
+APP_ROOT=$(pwd)
+
+# Create necessary directories
+mkdir -p "$APP_ROOT/tmp/pids"
+mkdir -p "$APP_ROOT/log"
+
+# Clean up any stale PID files
+find tmp/pids -name "*.pid" -delete 2>/dev/null || true
+find tmp/pids -name "*.lock" -delete 2>/dev/null || true
+
+# Start PostgreSQL if it's not running
+log "Checking PostgreSQL status..."
+if ! pg_isready -q; then
+  log "Starting PostgreSQL..."
+  brew services start postgresql@14
+
+  # Wait for PostgreSQL to start with a timeout
+  for i in {1..10}; do
+    sleep 1
+    if pg_isready -q; then
+      log "PostgreSQL started successfully."
+      break
+    fi
+    if [ $i -eq 10 ]; then
+      log "WARNING: PostgreSQL may not have started properly. Continuing anyway..."
+    fi
+  done
+else
+  log "PostgreSQL is already running."
+fi
+
+# Start Redis if it's not running
+log "Checking Redis status..."
+if ! redis-cli ping > /dev/null 2>&1; then
+  log "Starting Redis..."
+  brew services start redis
+
+  # Wait for Redis to start with a timeout
+  for i in {1..5}; do
+    sleep 1
+    if redis-cli ping > /dev/null 2>&1; then
+      log "Redis started successfully."
+      break
+    fi
+    if [ $i -eq 5 ]; then
+      log "WARNING: Redis may not have started properly. Continuing anyway..."
+    fi
+  done
+else
+  log "Redis is already running."
+fi
+
+# Clean up log files if they're too large
+for log_file in log/*.log; do
+  if [ -f "$log_file" ]; then
+    size=$(du -m "$log_file" 2>/dev/null | cut -f1) || size=0
+    if [ "$size" -gt 10 ]; then
+      log "Cleaning up large log file: $log_file ($size MB)"
+      cat /dev/null > "$log_file" 2>/dev/null || true
+    fi
+  fi
+done
+
+# Start SolidQueue if needed
+if [ "${SKIP_SOLID_QUEUE:-false}" != "true" ]; then
+  log "Starting SolidQueue with optimized settings..."
+
+  # Clean up any existing SolidQueue processes
+  log "Cleaning up existing SolidQueue processes..."
+  pkill -f "SolidQueue::Dispatcher" 2>/dev/null || true
+  pkill -f "SolidQueue::Worker" 2>/dev/null || true
+  bundle exec rails runner "begin; ActiveRecord::Base.connection.execute('DELETE FROM solid_queue_processes') rescue nil; end" 2>/dev/null || true
+
+  # Start SolidQueue with optimized settings
+  log "Starting SolidQueue dispatcher with reduced concurrency..."
+  nohup bundle exec rails runner "SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start" > log/solid_queue_dispatcher.log 2>&1 &
+  DISPATCHER_PID=$!
+  echo $DISPATCHER_PID > tmp/pids/solid_queue_dispatcher.pid
+  log "SolidQueue dispatcher started (PID: $DISPATCHER_PID)"
+
+  log "Starting SolidQueue worker with reduced concurrency..."
+  nohup bundle exec rails runner "SolidQueue::Worker.new(concurrency: 1).start" > log/solid_queue_worker.log 2>&1 &
+  WORKER_PID=$!
+  echo $WORKER_PID > tmp/pids/solid_queue_worker.pid
+  log "SolidQueue worker started (PID: $WORKER_PID)"
+
+  # Store the PIDs for cleanup
+  SOLID_QUEUE_PID="$DISPATCHER_PID $WORKER_PID"
+else
+  log "Skipping SolidQueue startup (SKIP_SOLID_QUEUE=true)"
+fi
+
+# Set environment variables for optimal performance
+export SKIP_MIGRATION_CHECK=true
+export RAILS_MAX_THREADS=5
+export RAILS_MIN_THREADS=1
+export WEB_CONCURRENCY=0 # No workers in development
+export MALLOC_ARENA_MAX=2 # Reduce memory usage
+export RUBY_GC_HEAP_INIT_SLOTS=600000
+export RUBY_GC_HEAP_FREE_SLOTS_MIN_RATIO=0.20
+export RUBY_GC_HEAP_FREE_SLOTS_GOAL_RATIO=0.40
+export SOLID_QUEUE_POLLING_INTERVAL=5 # Reduce polling frequency
+export SOLID_QUEUE_DISPATCHER_CONCURRENCY=1 # Reduce concurrency
+export SOLID_QUEUE_WORKER_CONCURRENCY=1 # Reduce concurrency
+export OPTIMIZE_GC=true
+export OPTIMIZE_AR=true
+export OPTIMIZE_REDIS=true
+export OPTIMIZE_APP=true
+
+# Create a file to enable caching in development
+touch tmp/caching-dev.txt
+
+# Start the Rails server
+log "Starting Rails server..."
+
+# Use the standard Rails server command directly
+exec bundle exec ruby "$APP_ROOT/bin/rails" server "$@"

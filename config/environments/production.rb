@@ -47,11 +47,30 @@ Rails.application.configure do
   }
 
   # Use Redis for caching
+  # Optimized Redis cache configuration
   config.cache_store = :redis_cache_store, {
     url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" },
-    size: 25.megabytes,
-    expires_in: 7.days
+    namespace: "ptex:cache:#{Rails.env}",
+    expires_in: ENV.fetch("CACHE_EXPIRES_IN", 7.days).to_i,
+    compress: true,
+    compression_threshold: 1.kilobyte,
+    pool_size: ENV.fetch("REDIS_POOL_SIZE", 10).to_i,
+    pool_timeout: ENV.fetch("REDIS_POOL_TIMEOUT", 5).to_i,
+    reconnect_attempts: 3,
+    error_handler: -> (method:, returning:, exception:) {
+      Rails.logger.error "Redis cache error: #{exception.message}"
+      Honeybadger.notify(exception) if defined?(Honeybadger)
+    }
   }
+
+  # Enable HTTP caching
+  config.public_file_server.headers = {
+    'Cache-Control' => "public, max-age=#{ENV.fetch('CACHE_MAX_AGE', 86400)}"
+  }
+
+  # Enable low-level caching
+  config.action_controller.perform_caching = true
+  config.action_view.cache_template_loading = true
 
   # Use a real mailer backend
   config.action_mailer.perform_caching = false
@@ -113,7 +132,7 @@ Rails.application.configure do
 
   # Configure logger to rotate logs
   config.logger = ActiveSupport::Logger.new(
-    config.paths["log"].first, 
+    config.paths["log"].first,
     1, # number of old logs to keep
     50.megabytes # max log size
   )

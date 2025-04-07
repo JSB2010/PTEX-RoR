@@ -34,7 +34,7 @@ class JobsCLI
     puts "Total Jobs: #{SolidQueue::Job.count}"
     puts "Ready Jobs: #{SolidQueue::Job.ready.count}"
     puts "Running Jobs: #{SolidQueue::Job.claimed.count}"
-    puts "Failed Jobs: #{SolidQueue::Job.joins(:failed_execution).count}"
+    puts "Failed Jobs: #{SolidQueue::Job.where.not(failed_at: nil).count}"
     puts "Scheduled Jobs: #{SolidQueue::Job.scheduled.count}"
     puts "\nProcess Details:"
     processes.each do |process|

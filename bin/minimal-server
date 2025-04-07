@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# Minimal server script for Rails
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
+
+# Start the Rails server with minimal configuration
+echo "Starting Rails server with minimal configuration..."
+exec bundle exec rails server --port=3002 --binding=0.0.0.0

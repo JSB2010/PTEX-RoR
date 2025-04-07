@@ -15,7 +15,7 @@ class SolidQueueCleanupJob < ApplicationJob
     }
 
     Rails.logger.info "Cleanup complete: #{cleanup_metrics.inspect}"
-    
+
     # Alert if there are concerning patterns
     alert_on_issues(cleanup_metrics)
   end
@@ -79,7 +79,7 @@ class SolidQueueCleanupJob < ApplicationJob
       .where.not(id: SolidQueue::ClaimedExecution.select(:job_id))
       .where.not(id: SolidQueue::BlockedExecution.select(:job_id))
       .find_each do |job|
-        job.update!(finished_at: Time.current)
+        job.update!(finished_at: Time.current, failed_at: Time.current)
         job.create_failed_execution!(error: "Job orphaned and marked as failed by cleanup")
         count += 1
       end
@@ -87,10 +87,9 @@ class SolidQueueCleanupJob < ApplicationJob
   end
 
   def analyze_failed_jobs
-    failed_jobs = SolidQueue::FailedExecution
-      .joins(:job)
-      .where('solid_queue_jobs.created_at > ?', 24.hours.ago)
-      .group('solid_queue_jobs.class_name')
+    failed_jobs = SolidQueue::Job
+      .where('failed_at > ?', 24.hours.ago)
+      .group(:class_name)
       .count
 
     # Record failure rates for monitoring

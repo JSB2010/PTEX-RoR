@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# Port server script for Rails
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
+
+# Start the Rails server directly on port 3001
+echo "Starting Rails server on port 3001..."
+exec bundle exec puma -p 3001

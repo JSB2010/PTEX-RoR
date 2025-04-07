@@ -1,166 +1,53 @@
-#!/usr/bin/env bash
-# Start all services with a single command
+#!/usr/bin/env ruby
+# Direct Rails server script that avoids recursion
 
-cd "$(dirname "$0")/.."
-APP_ROOT=$(pwd)
-PID_DIR="$APP_ROOT/tmp/pids"
-LOG_DIR="$APP_ROOT/log"
+require 'fileutils'
 
-mkdir -p "$PID_DIR"
-mkdir -p "$LOG_DIR"
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
 
-# Function to log messages with timestamps
-log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
-}
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
 
-# Function to clean up resources before exit
-cleanup() {
-  log "Cleaning up resources..."
+# Clean up any existing SolidQueue processes
+puts "Cleaning up SolidQueue processes..."
+system('pkill -f "SolidQueue::Dispatcher" 2>/dev/null || true')
+system('pkill -f "SolidQueue::Worker" 2>/dev/null || true')
 
-  # Kill all processes
-  if [ -n "$RAILS_PID" ]; then
-    log "Stopping Rails server (PID: $RAILS_PID)..."
-    kill -TERM $RAILS_PID 2>/dev/null || true
-  fi
-
-  if [ -n "$SOLID_QUEUE_PID" ]; then
-    log "Stopping SolidQueue (PID: $SOLID_QUEUE_PID)..."
-    kill -TERM $SOLID_QUEUE_PID 2>/dev/null || true
-  fi
-
-  # Remove PID files
-  rm -f "$PID_DIR/rails.pid" 2>/dev/null || true
-  rm -f "$PID_DIR/solid_queue_monitor.pid" 2>/dev/null || true
-
-  log "Cleanup complete"
-}
-
-# Set up trap for clean exit
-trap cleanup EXIT INT TERM
-
-# Check if PostgreSQL is running
-log "Checking PostgreSQL status..."
-if ! pg_isready -q; then
-  log "PostgreSQL is not running. Starting PostgreSQL..."
-  brew services start postgresql@14
+# Start PostgreSQL if it's not running
+unless system('pg_isready -q')
+  puts "Starting PostgreSQL..."
+  system('brew services start postgresql@14')
   sleep 3
+end
 
-  # Check again
-  if ! pg_isready -q; then
-    log "ERROR: Failed to start PostgreSQL. Please start it manually."
-    exit 1
-  fi
-
-  log "PostgreSQL started successfully."
-else
-  log "PostgreSQL is already running."
-fi
-
-# Check if Redis is running
-log "Checking Redis status..."
-if ! redis-cli ping > /dev/null 2>&1; then
-  log "Redis is not running. Starting Redis..."
-  brew services start redis
+# Start Redis if it's not running
+unless system('redis-cli ping > /dev/null 2>&1')
+  puts "Starting Redis..."
+  system('brew services start redis')
   sleep 2
-
-  # Check again
-  if ! redis-cli ping > /dev/null 2>&1; then
-    log "ERROR: Failed to start Redis. Please start it manually."
-    exit 1
-  fi
-
-  log "Redis started successfully."
-else
-  log "Redis is already running."
-fi
-
-# Check disk space
-log "Checking disk space..."
-DISK_SPACE=$(df -k "$APP_ROOT" | tail -1 | awk '{print $5}' | tr -d '%')
-if [ "$DISK_SPACE" -gt 90 ]; then
-  log "WARNING: Disk space is critically low (${DISK_SPACE}% used)"
-  log "Cleaning up log files..."
-  "$APP_ROOT/bin/clean_logs.sh"
-
-  # Check disk space again after cleanup
-  DISK_SPACE=$(df -k "$APP_ROOT" | tail -1 | awk '{print $5}' | tr -d '%')
-  if [ "$DISK_SPACE" -gt 90 ]; then
-    log "WARNING: Disk space is still critically low (${DISK_SPACE}% used) after cleanup"
-    log "Please free up disk space manually"
-  fi
-fi
-
-# Check if PostgreSQL has too many connections
-log "Checking PostgreSQL connections..."
-PG_CONNECTIONS=$(psql -U jbarkin28 -d postgres -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' ')
-PG_MAX_CONNECTIONS=$(psql -U jbarkin28 -d postgres -t -c "SHOW max_connections;" 2>/dev/null | tr -d ' ')
-
-if [ -n "$PG_CONNECTIONS" ] && [ -n "$PG_MAX_CONNECTIONS" ]; then
-  log "PostgreSQL connections: $PG_CONNECTIONS / $PG_MAX_CONNECTIONS"
-
-  # If we're using more than 80% of available connections, clean up idle connections
-  if [ $(($PG_CONNECTIONS * 100 / $PG_MAX_CONNECTIONS)) -gt 80 ]; then
-    log "WARNING: Too many PostgreSQL connections. Cleaning up idle connections..."
-
-    # Kill idle connections
-    psql -U jbarkin28 -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND (now() - state_change) > interval '5 minutes';"
-  fi
-fi
-
-# Configure database connection pool
-log "Configuring database connection pool..."
-export RAILS_MAX_THREADS=2
-
-# Optimize database if needed
-if [ "$OPTIMIZE_DB" = "true" ]; then
-  log "Optimizing database..."
-  bin/rails db:maintenance:optimize
-fi
+end
 
 # Start SolidQueue
-log "Starting SolidQueue..."
-"$APP_ROOT/bin/start_solid_queue"
-SOLID_QUEUE_PID=$(cat "$PID_DIR/solid_queue_monitor.pid" 2>/dev/null)
+puts "Starting SolidQueue..."
+dispatcher_pid = Process.spawn(
+  "bundle exec rails runner \"SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start\"",
+  out: File.join(app_root, 'log', 'solid_queue_dispatcher.log'),
+  err: File.join(app_root, 'log', 'solid_queue_dispatcher.log')
+)
+Process.detach(dispatcher_pid)
+puts "SolidQueue dispatcher started with PID: #{dispatcher_pid}"
 
-if [ -n "$SOLID_QUEUE_PID" ] && ps -p $SOLID_QUEUE_PID > /dev/null; then
-  log "SolidQueue started successfully (PID: $SOLID_QUEUE_PID)"
-else
-  log "WARNING: SolidQueue may not have started properly. Check logs for details."
-fi
+worker_pid = Process.spawn(
+  "bundle exec rails runner \"SolidQueue::Worker.new(concurrency: 1).start\"",
+  out: File.join(app_root, 'log', 'solid_queue_worker.log'),
+  err: File.join(app_root, 'log', 'solid_queue_worker.log')
+)
+Process.detach(worker_pid)
+puts "SolidQueue worker started with PID: #{worker_pid}"
 
-# Start Rails server
-log "Starting Rails server..."
-bin/rails server -d -P "$PID_DIR/rails.pid"
-RAILS_PID=$(cat "$PID_DIR/rails.pid" 2>/dev/null)
-
-if [ -n "$RAILS_PID" ] && ps -p $RAILS_PID > /dev/null; then
-  log "Rails server started successfully (PID: $RAILS_PID)"
-else
-  log "ERROR: Rails server failed to start. Check logs for details."
-  exit 1
-fi
-
-# Print success message
-log "All services started successfully!"
-log "Rails server: http://localhost:3000"
-log "Health page: http://localhost:3000/health"
-log "To stop all services, press Ctrl+C"
-
-# Keep the script running to maintain the trap
-while true; do
-  sleep 1
-
-  # Check if Rails server is still running
-  if [ ! -f "$PID_DIR/rails.pid" ] || ! ps -p $RAILS_PID > /dev/null; then
-    log "Rails server is no longer running. Exiting..."
-    exit 1
-  fi
-
-  # Check if SolidQueue is still running
-  if [ ! -f "$PID_DIR/solid_queue_monitor.pid" ] || ! ps -p $SOLID_QUEUE_PID > /dev/null; then
-    log "SolidQueue is no longer running. Attempting to restart..."
-    "$APP_ROOT/bin/start_solid_queue"
-    SOLID_QUEUE_PID=$(cat "$PID_DIR/solid_queue_monitor.pid" 2>/dev/null)
-  fi
-done
+# Start the Rails server directly
+puts "Starting Rails server..."
+exec "bundle exec rails server"

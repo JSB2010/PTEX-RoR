@@ -1,0 +1,37 @@
+#!/usr/bin/env ruby
+# Script to fix permissions for server scripts
+
+require 'fileutils'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+# List of scripts to make executable
+scripts = [
+  'bin/rails-server-complete',
+  'bin/rails-server-auto',
+  'bin/rails-server-simple',
+  'bin/start-server',
+  'bin/direct-server',
+  'bin/simple-server',
+  'bin/check-server',
+  'bin/start-all',
+  'bin/health-check',
+  'bin/db-init',
+  'bin/check-db-connection',
+  'bin/clean_logs.sh',
+  'bin/start_solid_queue'
+]
+
+# Make each script executable
+scripts.each do |script|
+  if File.exist?(script)
+    puts "Making #{script} executable..."
+    FileUtils.chmod('+x', script)
+  else
+    puts "#{script} does not exist, skipping."
+  end
+end
+
+puts "Done!"

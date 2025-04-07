@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+# Basic Rails server script
+
+require 'fileutils'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Start the Rails server directly
+puts "Starting Rails server..."
+exec "bundle exec puma -C config/puma.rb"

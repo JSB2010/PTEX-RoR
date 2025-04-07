@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# Puma server script for Rails
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
+
+# Start the Rails server directly
+echo "Starting Rails server directly with Puma..."
+exec bundle exec puma -p 3003 -b tcp://0.0.0.0:3003

@@ -26,10 +26,12 @@ module SolidQueue
     scope :recurring, -> { joins(:recurring_execution) }
     scope :active, -> { where(finished_at: nil) }
     scope :finished, -> { where.not(finished_at: nil) }
+    scope :failed, -> { where.not(failed_at: nil) }
+    scope :succeeded, -> { where.not(finished_at: nil).where(failed_at: nil) }
 
     def mark_as_failed(error)
       transaction do
-        update!(finished_at: Time.current)
+        update!(finished_at: Time.current, failed_at: Time.current)
         create_failed_execution!(error: error)
       end
     end
@@ -38,7 +40,7 @@ module SolidQueue
       return false unless failed_execution
       transaction do
         failed_execution.destroy
-        update!(finished_at: nil)
+        update!(finished_at: nil, failed_at: nil)
       end
       true
     end

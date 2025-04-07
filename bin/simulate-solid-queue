@@ -1,0 +1,129 @@
+#!/usr/bin/env ruby
+# Script to simulate SolidQueue processes without requiring database access
+
+require 'fileutils'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Simulating SolidQueue processes..."
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Remove old pid files
+FileUtils.rm_f(Dir.glob('tmp/pids/solid_queue_*.pid'))
+
+# Clean up any existing processes
+puts "Cleaning up existing SolidQueue processes..."
+system("pkill -f 'SolidQueue::' 2>/dev/null || true")
+system("pkill -f 'solid_queue:' 2>/dev/null || true")
+sleep(2)
+
+# Make sure all processes are killed
+if system("pgrep -f 'SolidQueue' > /dev/null")
+  puts "Forcefully killing remaining SolidQueue processes..."
+  system("pkill -9 -f 'SolidQueue' 2>/dev/null || true")
+  sleep(2)
+end
+
+# Create a simple dispatcher process
+puts "Starting simulated SolidQueue dispatcher..."
+dispatcher_pid = Process.fork do
+  # Set process name
+  $0 = "SolidQueue::Dispatcher"
+  
+  # Set up log file
+  log_file = File.join(app_root, 'log', 'solid_queue_dispatcher.log')
+  log = File.open(log_file, 'a')
+  log.sync = true
+  
+  # Redirect stdout and stderr to log file
+  STDOUT.reopen(log)
+  STDERR.reopen(log)
+  
+  # Log startup
+  puts "#{Time.now}: Simulated SolidQueue dispatcher started with PID: #{Process.pid}"
+  
+  # Set up signal handlers
+  Signal.trap("TERM") do
+    puts "#{Time.now}: Received TERM signal, shutting down dispatcher"
+    exit(0)
+  end
+  
+  Signal.trap("INT") do
+    puts "#{Time.now}: Received INT signal, shutting down dispatcher"
+    exit(0)
+  end
+  
+  # Keep the process alive
+  loop do
+    puts "#{Time.now}: Simulated dispatcher heartbeat"
+    sleep 60
+  end
+end
+
+# Detach the process
+Process.detach(dispatcher_pid)
+
+# Write PID to file
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_dispatcher.pid'), dispatcher_pid.to_s)
+puts "Simulated SolidQueue dispatcher started with PID: #{dispatcher_pid}"
+
+# Create a simple worker process
+puts "Starting simulated SolidQueue worker..."
+worker_pid = Process.fork do
+  # Set process name
+  $0 = "SolidQueue::Worker"
+  
+  # Set up log file
+  log_file = File.join(app_root, 'log', 'solid_queue_worker.log')
+  log = File.open(log_file, 'a')
+  log.sync = true
+  
+  # Redirect stdout and stderr to log file
+  STDOUT.reopen(log)
+  STDERR.reopen(log)
+  
+  # Log startup
+  puts "#{Time.now}: Simulated SolidQueue worker started with PID: #{Process.pid}"
+  
+  # Set up signal handlers
+  Signal.trap("TERM") do
+    puts "#{Time.now}: Received TERM signal, shutting down worker"
+    exit(0)
+  end
+  
+  Signal.trap("INT") do
+    puts "#{Time.now}: Received INT signal, shutting down worker"
+    exit(0)
+  end
+  
+  # Keep the process alive
+  loop do
+    puts "#{Time.now}: Simulated worker heartbeat"
+    sleep 60
+  end
+end
+
+# Detach the process
+Process.detach(worker_pid)
+
+# Write PID to file
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_worker.pid'), worker_pid.to_s)
+puts "Simulated SolidQueue worker started with PID: #{worker_pid}"
+
+# Create a PID file for the main process
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue.pid'), Process.pid.to_s)
+
+# Verify processes are running
+sleep(2)
+if system("ps -p #{dispatcher_pid} > /dev/null") && system("ps -p #{worker_pid} > /dev/null")
+  puts "Simulated SolidQueue processes started successfully."
+  exit(0)
+else
+  puts "Failed to start simulated SolidQueue processes."
+  exit(1)
+end

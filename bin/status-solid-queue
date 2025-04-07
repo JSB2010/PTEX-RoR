@@ -1,0 +1,89 @@
+#!/usr/bin/env ruby
+# Script to check the status of SolidQueue
+
+require 'fileutils'
+require 'socket'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Checking SolidQueue status..."
+
+# Load Rails environment
+require File.join(app_root, 'config', 'environment')
+
+# Check for running processes
+dispatcher_pid_file = File.join(app_root, 'tmp', 'pids', 'solid_queue_dispatcher.pid')
+worker_pid_file = File.join(app_root, 'tmp', 'pids', 'solid_queue_worker.pid')
+
+dispatcher_running = false
+worker_running = false
+
+if File.exist?(dispatcher_pid_file)
+  dispatcher_pid = File.read(dispatcher_pid_file).to_i
+  if dispatcher_pid > 0 && system("ps -p #{dispatcher_pid} > /dev/null")
+    dispatcher_running = true
+    puts "Dispatcher process is running with PID: #{dispatcher_pid}"
+  else
+    puts "Dispatcher process is not running (PID file exists but process not found)"
+  end
+else
+  puts "Dispatcher PID file not found"
+end
+
+if File.exist?(worker_pid_file)
+  worker_pid = File.read(worker_pid_file).to_i
+  if worker_pid > 0 && system("ps -p #{worker_pid} > /dev/null")
+    worker_running = true
+    puts "Worker process is running with PID: #{worker_pid}"
+  else
+    puts "Worker process is not running (PID file exists but process not found)"
+  end
+else
+  puts "Worker PID file not found"
+end
+
+# Check for registered processes in the database
+if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
+  hostname = Socket.gethostname
+  
+  # Get all processes for this host
+  processes = SolidQueue::Process.where(hostname: hostname)
+  
+  puts "\nRegistered processes in database for host #{hostname}:"
+  if processes.any?
+    processes.each do |process|
+      last_heartbeat = process.last_heartbeat_at ? "#{(Time.current - process.last_heartbeat_at).round} seconds ago" : "never"
+      puts "  #{process.kind} (#{process.name}): PID #{process.pid}, last heartbeat: #{last_heartbeat}"
+      
+      # Check if the process is actually running
+      if system("ps -p #{process.pid} > /dev/null")
+        puts "    Process is running"
+      else
+        puts "    WARNING: Process is not running but has a database record"
+      end
+    end
+  else
+    puts "  No process records found"
+  end
+  
+  # Check job counts
+  puts "\nJob counts:"
+  puts "  Ready jobs: #{SolidQueue::ReadyExecution.count}"
+  puts "  Scheduled jobs: #{SolidQueue::ScheduledExecution.count}"
+  puts "  Claimed jobs: #{SolidQueue::ClaimedExecution.count}"
+  puts "  Failed jobs: #{SolidQueue::Job.where.not(failed_at: nil).count}"
+  puts "  Completed jobs: #{SolidQueue::Job.where.not(finished_at: nil).where(failed_at: nil).count}"
+else
+  puts "\nCannot check database status: SolidQueue tables not found"
+end
+
+# Overall status
+if dispatcher_running && worker_running
+  puts "\nOverall status: RUNNING"
+  exit(0)
+else
+  puts "\nOverall status: NOT RUNNING"
+  exit(1)
+end

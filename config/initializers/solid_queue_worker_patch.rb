@@ -5,15 +5,35 @@ module SolidQueue
   class Worker
     attr_reader :thread_pool
 
-    def initialize(queues:, threads:, polling_interval:, name:, batch_size: nil, logger: nil)
-      @queues = queues
-      @thread_count = threads
-      @polling_interval = polling_interval
-      @batch_size = batch_size || 100
-      @name = name
-      @logger = logger || Rails.logger
+    # Handle different parameter sets for different SolidQueue versions
+    def initialize(*args, **kwargs)
+      if kwargs.key?(:concurrency)
+        # New SolidQueue version
+        @queues = kwargs[:queues] || ['default']
+        @thread_count = kwargs[:concurrency] || 5
+        @polling_interval = kwargs[:polling_interval] || 0.5
+        @batch_size = kwargs[:batch_size] || 100
+        @name = kwargs[:name] || "worker-#{SecureRandom.hex(6)}"
+        @logger = kwargs[:logger] || Rails.logger
+      elsif kwargs.key?(:threads)
+        # Old SolidQueue version
+        @queues = kwargs[:queues] || ['default']
+        @thread_count = kwargs[:threads] || 5
+        @polling_interval = kwargs[:polling_interval] || 0.5
+        @batch_size = kwargs[:batch_size] || 100
+        @name = kwargs[:name] || "worker-#{SecureRandom.hex(6)}"
+        @logger = kwargs[:logger] || Rails.logger
+      else
+        # Fallback
+        @queues = ['default']
+        @thread_count = 5
+        @polling_interval = 0.5
+        @batch_size = 100
+        @name = "worker-#{SecureRandom.hex(6)}"
+        @logger = Rails.logger
+      end
       @running = true
-      @thread_pool = Concurrent::FixedThreadPool.new(threads)
+      @thread_pool = Concurrent::FixedThreadPool.new(@thread_count)
     end
 
     def start
@@ -75,7 +95,7 @@ module SolidQueue
     def perform_job(job)
       Rails.application.reloader.wrap do
         @logger.info("Starting job execution for #{job.class_name} (ID: #{job.id})")
-        
+
         if job.active_job_id.present?
           perform_active_job(job)
         else
@@ -106,7 +126,7 @@ module SolidQueue
       }
 
       @logger.info("Job data prepared: #{serialized_job.inspect}")
-      
+
       Rails.application.executor.wrap do
         job_instance = job.class_name.constantize.new
         # Set up logging context before job execution
@@ -118,7 +138,7 @@ module SolidQueue
           job_instance.perform_now
         end
       end
-      
+
       @logger.info("Successfully completed job #{job.id}")
     end
 

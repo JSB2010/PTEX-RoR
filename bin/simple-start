@@ -1,0 +1,67 @@
+#!/usr/bin/env ruby
+# Simple script to start the server
+
+require 'fileutils'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Clean up any stale PID files
+Dir.glob('tmp/pids/*.pid').each { |f| File.delete(f) }
+Dir.glob('tmp/pids/*.lock').each { |f| File.delete(f) }
+
+# Kill any existing Rails processes
+system('pkill -f "rails runner"')
+system('pkill -f "SolidQueue::Dispatcher"')
+system('pkill -f "SolidQueue::Worker"')
+
+# Clean up database tables
+system("bundle exec rails runner \"begin; ActiveRecord::Base.connection.execute('DELETE FROM solid_queue_processes') rescue nil; end\"")
+
+# Start PostgreSQL if it's not running
+unless system('pg_isready -q')
+  puts "Starting PostgreSQL..."
+  system('brew services start postgresql@14')
+  sleep 3
+end
+
+# Start Redis if it's not running
+unless system('redis-cli ping > /dev/null 2>&1')
+  puts "Starting Redis..."
+  system('brew services start redis')
+  sleep 2
+end
+
+# Set environment variables for optimal performance
+ENV['RAILS_MAX_THREADS'] = '5'
+ENV['RAILS_MIN_THREADS'] = '1'
+ENV['WEB_CONCURRENCY'] = '0' # No workers in development
+ENV['MALLOC_ARENA_MAX'] = '2' # Reduce memory usage
+ENV['RUBY_GC_HEAP_INIT_SLOTS'] = '600000'
+ENV['RUBY_GC_HEAP_FREE_SLOTS_MIN_RATIO'] = '0.20'
+ENV['RUBY_GC_HEAP_FREE_SLOTS_GOAL_RATIO'] = '0.40'
+ENV['SOLID_QUEUE_POLLING_INTERVAL'] = '5' # Reduce polling frequency
+ENV['SOLID_QUEUE_DISPATCHER_CONCURRENCY'] = '1' # Reduce concurrency
+ENV['SOLID_QUEUE_WORKER_CONCURRENCY'] = '1' # Reduce concurrency
+ENV['OPTIMIZE_GC'] = 'true'
+ENV['OPTIMIZE_AR'] = 'true'
+ENV['OPTIMIZE_REDIS'] = 'true'
+ENV['OPTIMIZE_APP'] = 'true'
+ENV['RAILS_SERVER_STARTED'] = 'true'
+
+# Create a file to enable caching in development
+FileUtils.touch('tmp/caching-dev.txt')
+
+# Start SolidQueue in a controlled environment
+puts "Starting SolidQueue in a controlled environment..."
+system("bundle exec rails runner \"SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start\" > log/solid_queue_dispatcher.log 2>&1 &")
+system("bundle exec rails runner \"SolidQueue::Worker.new(concurrency: 1).start\" > log/solid_queue_worker.log 2>&1 &")
+
+# Start the Rails server
+puts "Starting Rails server..."
+exec "bundle exec rails server"

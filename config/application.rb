@@ -17,8 +17,46 @@ module PtexRoR
     config.time_zone = "UTC"
     config.eager_load_paths << Rails.root.join("lib")
 
+    # Skip migration check if environment variable is set
+    if ENV['SKIP_MIGRATION_CHECK'] == 'true'
+      config.paths['db/migrate'] = []
+    end
+
+    # Configure migration settings
+    config.after_initialize do
+      # Skip migrations in development mode if requested
+      if ENV['SKIP_MIGRATION_CHECK'] == 'true' && defined?(ActiveRecord::Migration)
+        # Monkey patch the migration check to always return empty array
+        ActiveRecord::Migration.singleton_class.prepend(Module.new do
+          def check_pending!
+            # Do nothing
+          end
+
+          def migrations_paths
+            []
+          end
+
+          def migrations_status
+            []
+          end
+        end)
+      end
+    end
+
     # Active Job configuration
-    config.active_job.queue_adapter = :solid_queue
+    if ENV['SKIP_SOLID_QUEUE'] == 'true'
+      config.active_job.queue_adapter = :inline
+    else
+      begin
+        # Check if SolidQueue is available
+        require 'solid_queue'
+        config.active_job.queue_adapter = :solid_queue
+      rescue LoadError => e
+        # Fall back to inline adapter if SolidQueue is not available
+        Rails.logger.warn "SolidQueue not available: #{e.message}. Using inline adapter instead."
+        config.active_job.queue_adapter = :inline
+      end
+    end
 
     # Redis cache store configuration
     config.cache_store = :redis_cache_store, {

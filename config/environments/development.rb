@@ -19,9 +19,34 @@ Rails.application.configure do
   if Rails.root.join("tmp/caching-dev.txt").exist?
     config.action_controller.perform_caching = true
     config.action_controller.enable_fragment_cache_logging = true
-    config.cache_store = :redis_cache_store, { 
-      url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" }
-    }
+
+    # Use Redis for caching if available
+    if ENV["REDIS_URL"].present?
+      config.cache_store = :redis_cache_store, {
+        url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" },
+        namespace: "ptex:cache:#{Rails.env}",
+        expires_in: ENV.fetch("CACHE_EXPIRES_IN", 1.hour).to_i,
+        compress: true,
+        compression_threshold: 1.kilobyte,
+        pool_size: ENV.fetch("REDIS_POOL_SIZE", 5).to_i,
+        pool_timeout: ENV.fetch("REDIS_POOL_TIMEOUT", 5).to_i,
+        error_handler: -> (method:, returning:, exception:) {
+          Rails.logger.error "Redis cache error: #{exception.message}"
+        }
+      }
+
+      # Enable low-level caching
+      config.action_controller.perform_caching = true
+      config.action_view.cache_template_loading = true
+
+      # Enable HTTP caching
+      config.public_file_server.headers = {
+        'Cache-Control' => "public, max-age=#{ENV.fetch('CACHE_MAX_AGE', 3600)}"
+      }
+    else
+      # Fall back to memory store if Redis is not available
+      config.cache_store = :memory_store, { size: 64.megabytes }
+    end
   else
     config.action_controller.perform_caching = false
     config.cache_store = :null_store

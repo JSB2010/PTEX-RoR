@@ -17,6 +17,7 @@ module SolidQueue
     validates :kind, presence: true
     validates :name, presence: true, uniqueness: { scope: :supervisor_id }
     validates :pid, presence: true
+    validates :hostname, presence: true
 
     def self.register(kind:, name: nil, pid: nil, hostname: nil, supervisor: nil, metadata: nil)
       create!(
@@ -34,11 +35,24 @@ module SolidQueue
       find_by(pid: ::Process.pid)
     end
 
+    def self.prune
+      where('last_heartbeat_at < ?', 5.minutes.ago).destroy_all
+    end
+
+    def supervisees
+      self.class.where(supervisor_id: id)
+    end
+
     def update_heartbeat!
       update!(last_heartbeat_at: Time.current)
     rescue ActiveRecord::StaleObjectError
       reload
       retry
+    end
+
+    # Method for compatibility
+    def heartbeat
+      update_heartbeat!
     end
 
     def deregister
@@ -51,7 +65,7 @@ module SolidQueue
 
     def alive?
       return false unless pid
-      
+
       begin
         ::Process.kill(0, pid)
         true

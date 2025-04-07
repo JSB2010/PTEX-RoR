@@ -16,6 +16,14 @@ module SolidQueueManager
       if pg_connections[:warning]
         Rails.logger.warn "PostgreSQL connections are high (#{pg_connections[:percentage]}%). This may cause issues with SolidQueue."
         PostgresConnectionManager.cleanup_connections
+
+        # Check again after cleanup
+        pg_connections = PostgresConnectionManager.connection_status
+        if pg_connections[:warning]
+          Rails.logger.warn "PostgreSQL connections are still high (#{pg_connections[:percentage]}%) after cleanup."
+          # Don't restart PostgreSQL automatically as it can cause issues
+          # system("brew services restart postgresql@14")
+        end
       end
 
       # Clean up stale processes
@@ -73,24 +81,27 @@ module SolidQueueManager
           if serialized_job && job.active_job_id.present?
             begin
               job.class_name.constantize.perform_now(*serialized_job['arguments'])
-              job.update!(finished_at: Time.current)
+              job.update!(finished_at: Time.current, failed_at: nil)
               execution.destroy
               Rails.logger.info "Successfully processed job: #{job.id}"
             rescue => e
               Rails.logger.error "Error processing job #{job.id}: #{e.message}"
 
-              # Move to failed queue
-              SolidQueue::Failed.create!(
+              # Create failed execution
+              SolidQueue::FailedExecution.create!(
                 job_id: job.id,
-                error_message: e.message,
-                error_backtrace: e.backtrace.join("\n")
+                error: "#{e.class}: #{e.message}\n#{e.backtrace.join('\n')}"
               )
-              job.update!(finished_at: Time.current)
+              job.update!(finished_at: Time.current, failed_at: Time.current)
               execution.destroy
             end
           else
             Rails.logger.warn "Could not parse job arguments for job: #{job.id}"
-            job.update!(finished_at: Time.current)
+            job.update!(finished_at: Time.current, failed_at: Time.current)
+            SolidQueue::FailedExecution.create!(
+              job_id: job.id,
+              error: "Could not parse job arguments"
+            )
             execution.destroy
           end
         rescue => e

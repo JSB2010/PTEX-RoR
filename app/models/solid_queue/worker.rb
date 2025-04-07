@@ -31,7 +31,7 @@ module SolidQueue
     def start
       @logger.info "Starting SolidQueue worker #{@name} with #{@thread_count} threads"
       register_process("worker")
-      
+
       @threads = @thread_count.times.map do |i|
         Thread.new do
           Thread.current.name = "worker-#{i}"
@@ -79,7 +79,7 @@ module SolidQueue
 
       begin
         perform_job(job)
-        job.update!(finished_at: Time.current)
+        job.update!(finished_at: Time.current, failed_at: nil)
         log_success(job, start_time)
         @metrics[:processed_jobs] += 1
         @metrics[:last_job_time] = Time.current
@@ -120,21 +120,21 @@ module SolidQueue
     def handle_job_error(job, error)
       @logger.error("Job #{job.id} failed: #{error.class} - #{error.message}")
       @logger.error(error.backtrace.join("\n"))
-      
+
       job.update!(
         error_message: error.message,
         error_class: error.class.name,
         failed_at: Time.current,
         error_backtrace: error.backtrace&.join("\n")
       )
-      
+
       # Track error count for circuit breaking
       track_error
     end
 
     def track_error
       reset_error_counts if should_reset_error_counts?
-      
+
       @error_counts[Thread.current.name] += 1
       if @error_counts[Thread.current.name] >= MAX_ERROR_COUNT
         @logger.error "Thread #{Thread.current.name} exceeded error threshold, stopping..."
@@ -152,7 +152,7 @@ module SolidQueue
     end
 
     def should_report_metrics?
-      @metrics[:last_report_time].nil? || 
+      @metrics[:last_report_time].nil? ||
         Time.current - @metrics[:last_report_time] >= 60 # Report every minute
     end
 

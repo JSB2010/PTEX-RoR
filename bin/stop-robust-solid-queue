@@ -1,0 +1,88 @@
+#!/usr/bin/env ruby
+# Script to stop SolidQueue processes and clean up database records
+
+require 'fileutils'
+require 'socket'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Stopping SolidQueue processes..."
+
+# First, try to stop processes using PID files
+pid_dir = File.join(app_root, 'tmp', 'pids')
+['solid_queue_dispatcher.pid', 'solid_queue_worker.pid'].each do |pid_file|
+  full_path = File.join(pid_dir, pid_file)
+  if File.exist?(full_path)
+    begin
+      pid = File.read(full_path).to_i
+      if pid > 0
+        begin
+          puts "Sending TERM signal to process #{pid} (#{pid_file})"
+          Process.kill('TERM', pid)
+          # Give it a moment to shut down gracefully
+          sleep 1
+          
+          # Check if it's still running
+          if system("ps -p #{pid} > /dev/null")
+            puts "Process #{pid} is still running, sending KILL signal"
+            Process.kill('KILL', pid)
+          else
+            puts "Process #{pid} has been terminated"
+          end
+        rescue Errno::ESRCH
+          puts "Process #{pid} not found"
+        end
+      end
+      # Remove the PID file
+      File.unlink(full_path)
+    rescue => e
+      puts "Error stopping process from #{pid_file}: #{e.message}"
+    end
+  end
+end
+
+# Then use pkill as a fallback
+puts "Using pkill to find and stop any remaining SolidQueue processes..."
+system("pkill -f 'SolidQueue::' 2>/dev/null || true")
+system("pkill -f 'solid_queue:' 2>/dev/null || true")
+sleep(1)
+
+# Make sure all processes are killed
+if system("pgrep -f 'SolidQueue\\|solid_queue:' > /dev/null")
+  puts "Forcefully killing remaining SolidQueue processes..."
+  system("pkill -9 -f 'SolidQueue' 2>/dev/null || true")
+  system("pkill -9 -f 'solid_queue:' 2>/dev/null || true")
+  sleep(1)
+end
+
+# Clean up database records
+begin
+  require File.join(app_root, 'config', 'environment')
+  if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
+    hostname = Socket.gethostname
+    puts "Cleaning up database records for host: #{hostname}"
+    count = SolidQueue::Process.where(hostname: hostname).delete_all
+    puts "Removed #{count} process records from the database"
+    
+    # Clean up claimed executions with no process
+    orphaned_count = SolidQueue::ClaimedExecution
+      .joins('LEFT JOIN solid_queue_processes ON solid_queue_processes.id = process_id')
+      .where('solid_queue_processes.id IS NULL')
+      .delete_all
+    puts "Cleaned up #{orphaned_count} orphaned executions"
+  end
+rescue => e
+  puts "Error cleaning up database records: #{e.message}"
+end
+
+# Verify all processes are stopped
+if system("pgrep -f 'SolidQueue\\|solid_queue:' > /dev/null")
+  puts "WARNING: Some SolidQueue processes are still running!"
+  system("ps aux | grep -E 'SolidQueue|solid_queue:' | grep -v grep")
+  exit(1)
+else
+  puts "All SolidQueue processes have been stopped."
+  exit(0)
+end

@@ -1,6 +1,20 @@
 class Rack::Attack
   ### Configure Cache ###
-  Rack::Attack.cache.store = Rails.cache
+  # Use Redis for throttling if available, otherwise use Rails cache
+  if defined?(Redis) && ENV['REDIS_URL'].present?
+    begin
+      redis = Redis.new(url: ENV['REDIS_URL'])
+      redis.ping # Test connection
+      Rack::Attack.cache.store = ActiveSupport::Cache::RedisCacheStore.new(redis: redis)
+      Rails.logger.info "Rack::Attack using Redis for cache store"
+    rescue => e
+      Rails.logger.warn "Failed to connect to Redis for Rack::Attack: #{e.message}. Using Rails cache instead."
+      Rack::Attack.cache.store = Rails.cache
+    end
+  else
+    Rack::Attack.cache.store = Rails.cache
+    Rails.logger.info "Rack::Attack using Rails cache store"
+  end
 
   ### Safelist Trusted IPs ###
   safelist('allow from localhost') do |req|
@@ -19,10 +33,10 @@ class Rack::Attack
   end
 
   ### Rate Limits ###
-  
-  # Global rate limit per IP
-  throttle('req/ip', limit: 300, period: 5.minutes) do |req|
-    req.ip unless req.path.start_with?('/assets', '/packs', '/images')
+
+  # Global rate limit per IP - use environment variables for easy configuration
+  throttle('req/ip', limit: ENV.fetch('THROTTLE_REQUESTS_PER_MINUTE', 300).to_i, period: 1.minute) do |req|
+    req.ip unless req.path.start_with?('/assets', '/packs', '/images', '/fonts', '/favicon.ico')
   end
 
   # Throttle login attempts by IP
@@ -93,6 +107,11 @@ class Rack::Attack
     end
   end
 
+  # Throttle health check requests by IP
+  throttle('health/ip', limit: ENV.fetch('THROTTLE_HEALTH_REQUESTS_PER_MINUTE', 30).to_i, period: 1.minute) do |req|
+    req.ip if req.path == '/health'
+  end
+
   ### Security Blocks ###
 
   # Block known bad actors
@@ -157,7 +176,7 @@ class Rack::Attack
     [
       429,
       headers,
-      [{ 
+      [{
         error: "Rate limit exceeded. Please retry later.",
         retry_after: (match_data[:period] - now.to_i % match_data[:period]),
         details: match_data[:discriminator]
@@ -182,7 +201,7 @@ class Rack::Attack
     return true if req.user_agent =~ /^$/i # Blank user agent
     return true if req.user_agent =~ /(masscan|nikto|sqlmap|nmap|nessus|acunetix|metasploit)/i
     return true if req.path =~ /(\.env|composer\.json|yarn\.lock|package\.json|Gemfile)$/i
-    
+
     # Check for suspicious query parameters
     if req.query_string
       decoded = CGI.unescape(req.query_string)

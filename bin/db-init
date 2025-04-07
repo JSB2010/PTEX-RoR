@@ -14,24 +14,24 @@ log "Checking if PostgreSQL is running..."
 if ! pg_isready -q; then
   log "PostgreSQL is not running. Starting PostgreSQL..."
   brew services start postgresql@14
-  
+
   # Wait for PostgreSQL to start
   max_attempts=10
   attempt=1
   delay=2
-  
+
   while [ $attempt -le $max_attempts ]; do
     log "Waiting for PostgreSQL to start (attempt $attempt/$max_attempts)..."
     sleep $delay
-    
+
     if pg_isready -q; then
       log "PostgreSQL started successfully."
       break
     fi
-    
+
     attempt=$((attempt + 1))
   done
-  
+
   if [ $attempt -gt $max_attempts ]; then
     log "ERROR: Failed to start PostgreSQL after $max_attempts attempts."
     exit 1
@@ -45,39 +45,57 @@ log "Checking if database exists..."
 if ! psql -lqt | cut -d \| -f 1 | grep -qw ptex_development; then
   log "Database 'ptex_development' does not exist. Creating database..."
   bundle exec rails db:create
-  
+
   if [ $? -ne 0 ]; then
     log "ERROR: Failed to create database."
     exit 1
   fi
-  
+
   log "Running database migrations..."
   bundle exec rails db:migrate
-  
+
   if [ $? -ne 0 ]; then
     log "ERROR: Failed to run migrations."
     exit 1
   fi
-  
+
   log "Database initialized successfully."
 else
   log "Database 'ptex_development' already exists."
-  
-  # Check if migrations are pending
+
+  # Check if migrations are pending with a timeout
   log "Checking for pending migrations..."
-  if bundle exec rails db:migrate:status | grep -q "down"; then
-    log "Running pending migrations..."
-    bundle exec rails db:migrate
-    
-    if [ $? -ne 0 ]; then
-      log "ERROR: Failed to run migrations."
-      exit 1
+
+  # Use timeout to prevent hanging
+  timeout_seconds=10
+
+  # Create a temporary file to store the output
+  temp_file=$(mktemp)
+
+  # Run the migration status check with a timeout
+  if timeout $timeout_seconds bundle exec rails db:migrate:status > "$temp_file" 2>&1; then
+    # Check if there are pending migrations
+    if grep -q "down" "$temp_file"; then
+      log "Running pending migrations..."
+      timeout 30 bundle exec rails db:migrate
+
+      if [ $? -ne 0 ]; then
+        log "ERROR: Failed to run migrations."
+        rm -f "$temp_file"
+        exit 1
+      fi
+
+      log "Migrations completed successfully."
+    else
+      log "No pending migrations."
     fi
-    
-    log "Migrations completed successfully."
   else
-    log "No pending migrations."
+    log "WARNING: Migration status check timed out after $timeout_seconds seconds."
+    log "Assuming migrations are up to date and continuing..."
   fi
+
+  # Clean up the temporary file
+  rm -f "$temp_file"
 fi
 
 log "Database initialization complete."

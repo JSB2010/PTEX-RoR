@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Script to clean up redundant server scripts
+
+# Function to log messages with timestamps
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Change to the Rails root directory
+cd "$(dirname "$0")/.." || exit 1
+APP_ROOT=$(pwd)
+
+# Create a backup directory
+BACKUP_DIR="$APP_ROOT/tmp/script_backup"
+mkdir -p "$BACKUP_DIR"
+
+log "Creating backup of all scripts in $BACKUP_DIR"
+
+# List of scripts to keep
+KEEP_SCRIPTS=(
+  "rails"
+  "optimized-server"
+  "check-db-connection"
+  "db-init"
+  "clean_logs.sh"
+  "fix-permissions"
+  "cleanup-scripts"
+)
+
+# Backup and remove redundant scripts
+for script in bin/rails-server* bin/*server* bin/start-* bin/check-server; do
+  if [ -f "$script" ]; then
+    script_name=$(basename "$script")
+    
+    # Check if this script should be kept
+    keep=false
+    for keep_script in "${KEEP_SCRIPTS[@]}"; do
+      if [ "$script_name" = "$keep_script" ]; then
+        keep=true
+        break
+      fi
+    done
+    
+    if [ "$keep" = false ]; then
+      log "Backing up and removing $script_name"
+      cp "$script" "$BACKUP_DIR/"
+      rm "$script"
+    else
+      log "Keeping $script_name"
+    fi
+  fi
+done
+
+log "Cleanup complete. Redundant scripts have been backed up to $BACKUP_DIR"
+log "The following scripts have been kept:"
+for script in "${KEEP_SCRIPTS[@]}"; do
+  if [ -f "bin/$script" ]; then
+    log "  - $script"
+  fi
+done

@@ -1,0 +1,115 @@
+#!/usr/bin/env ruby
+# Simple script to start SolidQueue with proper database registration
+
+require 'fileutils'
+require 'socket'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Starting simple SolidQueue..."
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Remove old pid files
+FileUtils.rm_f(Dir.glob('tmp/pids/solid_queue_*.pid'))
+
+# Clean up database records
+begin
+  require File.join(app_root, 'config', 'environment')
+
+  # Clean up any existing processes from this host
+  if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
+    hostname = Socket.gethostname
+    puts "Cleaning up existing SolidQueue processes for host: #{hostname}"
+    SolidQueue::Process.where(hostname: hostname).destroy_all
+
+    # Clean up claimed executions with no process
+    SolidQueue::ClaimedExecution
+      .joins('LEFT JOIN solid_queue_processes ON solid_queue_processes.id = process_id')
+      .where('solid_queue_processes.id IS NULL')
+      .delete_all
+  end
+
+  # Start the SolidQueue dispatcher
+  puts "Starting SolidQueue dispatcher..."
+  dispatcher_pid = spawn(
+    "bundle exec rails runner '
+      begin
+        dispatcher = SolidQueue::Dispatcher.new(polling_interval: 5)
+        process = SolidQueue::Process.register(
+          kind: "Dispatcher",
+          name: "dispatcher-#{Socket.gethostname}",
+          metadata: { polling_interval: 5 }
+        )
+
+        # Start heartbeat thread
+        Thread.new do
+          while true
+            begin
+              process.update_heartbeat!
+            rescue => e
+              Rails.logger.error("Heartbeat error: #{e.message}")
+            end
+            sleep 30
+          end
+        end
+
+        dispatcher.start
+      rescue => e
+        Rails.logger.error("Dispatcher error: #{e.message}")
+        Rails.logger.error(e.backtrace.join("\\n"))
+      end
+    '",
+    out: File.join(app_root, 'log', 'solid_queue_dispatcher.log'),
+    err: File.join(app_root, 'log', 'solid_queue_dispatcher.log')
+  )
+  Process.detach(dispatcher_pid)
+  File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_dispatcher.pid'), dispatcher_pid.to_s)
+  puts "SolidQueue dispatcher started with PID: #{dispatcher_pid}"
+
+  # Start the SolidQueue worker
+  puts "Starting SolidQueue worker..."
+  worker_pid = spawn(
+    "bundle exec rails runner '
+      begin
+        worker = SolidQueue::Worker.new(concurrency: 1)
+        process = SolidQueue::Process.register(
+          kind: "Worker",
+          name: "worker-#{Socket.gethostname}",
+          metadata: { concurrency: 1, queues: ["default"] }
+        )
+
+        # Start heartbeat thread
+        Thread.new do
+          while true
+            begin
+              process.update_heartbeat!
+            rescue => e
+              Rails.logger.error("Heartbeat error: #{e.message}")
+            end
+            sleep 30
+          end
+        end
+
+        worker.start
+      rescue => e
+        Rails.logger.error("Worker error: #{e.message}")
+        Rails.logger.error(e.backtrace.join("\\n"))
+      end
+    '",
+    out: File.join(app_root, 'log', 'solid_queue_worker.log'),
+    err: File.join(app_root, 'log', 'solid_queue_worker.log')
+  )
+  Process.detach(worker_pid)
+  File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_worker.pid'), worker_pid.to_s)
+  puts "SolidQueue worker started with PID: #{worker_pid}"
+
+  puts "SolidQueue processes started."
+rescue => e
+  puts "Error starting SolidQueue: #{e.message}"
+  puts e.backtrace.join("\n")
+end

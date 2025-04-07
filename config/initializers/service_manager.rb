@@ -109,10 +109,50 @@ module ServiceManager
 
       # Start SolidQueue in a separate process
       Rails.logger.info "Starting SolidQueue..."
-      solid_queue_pid = Process.spawn("#{Rails.root}/bin/start_solid_queue",
-                                    out: File.join(Rails.root, 'log', 'solid_queue.log'),
-                                    err: File.join(Rails.root, 'log', 'solid_queue.log'))
-      Process.detach(solid_queue_pid)
+      solid_queue_script = File.join(Rails.root, 'bin', 'start-solid-queue')
+
+      if File.exist?(solid_queue_script)
+        # Make sure the script is executable
+        File.chmod(0755, solid_queue_script) rescue nil
+
+        solid_queue_pid = Process.spawn(solid_queue_script,
+                                      out: File.join(Rails.root, 'log', 'solid_queue.log'),
+                                      err: File.join(Rails.root, 'log', 'solid_queue.log'))
+        Process.detach(solid_queue_pid)
+      else
+        Rails.logger.warn "SolidQueue script not found at #{solid_queue_script}. Starting SolidQueue inline..."
+
+        # Start SolidQueue inline
+        begin
+          require 'fileutils'
+
+          # Create necessary directories
+          FileUtils.mkdir_p(File.join(Rails.root, 'tmp', 'pids'))
+          FileUtils.mkdir_p(File.join(Rails.root, 'log'))
+
+          # Start the SolidQueue dispatcher
+          dispatcher_pid = spawn(
+            "bundle exec rails runner 'SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start'",
+            out: File.join(Rails.root, 'log', 'solid_queue_dispatcher.log'),
+            err: File.join(Rails.root, 'log', 'solid_queue_dispatcher.log')
+          )
+          Process.detach(dispatcher_pid)
+
+          # Start the SolidQueue worker
+          worker_pid = spawn(
+            "bundle exec rails runner 'SolidQueue::Worker.new(concurrency: 1).start'",
+            out: File.join(Rails.root, 'log', 'solid_queue_worker.log'),
+            err: File.join(Rails.root, 'log', 'solid_queue_worker.log')
+          )
+          Process.detach(worker_pid)
+
+          # Use the combined PIDs
+          solid_queue_pid = "#{dispatcher_pid},#{worker_pid}"
+        rescue => e
+          Rails.logger.error "Failed to start SolidQueue inline: #{e.message}"
+          solid_queue_pid = nil
+        end
+      end
 
       # Write PID to file
       pid_dir = File.join(Rails.root, 'tmp', 'pids')

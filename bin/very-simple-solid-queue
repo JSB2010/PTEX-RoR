@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+# Very simple script to start SolidQueue
+
+require 'fileutils'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Starting very simple SolidQueue..."
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Remove old pid files
+FileUtils.rm_f(Dir.glob('tmp/pids/solid_queue_*.pid'))
+
+# Start the SolidQueue dispatcher
+puts "Starting SolidQueue dispatcher..."
+dispatcher_pid = spawn(
+  "cd #{app_root} && bin/rails runner 'SolidQueue::Dispatcher.new(polling_interval: 5).start'",
+  out: File.join(app_root, 'log', 'solid_queue_dispatcher.log'),
+  err: File.join(app_root, 'log', 'solid_queue_dispatcher.log')
+)
+Process.detach(dispatcher_pid)
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_dispatcher.pid'), dispatcher_pid.to_s)
+puts "SolidQueue dispatcher started with PID: #{dispatcher_pid}"
+
+# Start the SolidQueue worker
+puts "Starting SolidQueue worker..."
+worker_pid = spawn(
+  "cd #{app_root} && bin/rails runner 'SolidQueue::Worker.new(concurrency: 1).start'",
+  out: File.join(app_root, 'log', 'solid_queue_worker.log'),
+  err: File.join(app_root, 'log', 'solid_queue_worker.log')
+)
+Process.detach(worker_pid)
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_worker.pid'), worker_pid.to_s)
+puts "SolidQueue worker started with PID: #{worker_pid}"
+
+puts "SolidQueue processes started."

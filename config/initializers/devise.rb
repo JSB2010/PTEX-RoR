@@ -12,7 +12,15 @@ Devise.setup do |config|
   # The secret key used by Devise. Devise uses this key to generate
   # random tokens. Changing this key will render invalid all existing
   # confirmation, reset password and unlock tokens in the database.
-  config.secret_key = Rails.application.credentials.secret_key_base
+  # Use a fallback for the secret key if credentials are not available
+  begin
+    config.secret_key = Rails.application.credentials.secret_key_base
+  rescue => e
+    # Log the error but don't crash
+    Rails.logger.warn "Could not load secret_key_base from credentials: #{e.message}"
+    # Use a default secret key for development
+    config.secret_key = ENV['DEVISE_SECRET_KEY'] || '30f0aad4b9e003b7af698ac47f6c293d1d3e5a75db5cb1905dbe72048f2cbb8c7e096f1b6ffa0d2a3c5694e4738e0b5c9d73d36b4466ff1954bd930c9f0d2f8c'
+  end
 
   # ==> Controller configuration
   # Configure the parent class to the devise controllers.

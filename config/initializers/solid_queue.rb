@@ -94,66 +94,118 @@ Rails.application.config.after_initialize do
   # Only run in server mode, not in console or tests
   if (defined?(Rails::Server) || defined?(Puma)) && !Rails.env.test? && !defined?(Rails::Console)
     begin
-      # Clean up stale processes
-      if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
-        Rails.logger.info "Cleaning up stale SolidQueue processes..."
-
-        # Clean up processes from this host
-        SolidQueue::Process.where(hostname: Socket.gethostname).find_each do |process|
-          Rails.logger.info "Deregistering stale process: #{process.name} (#{process.id})"
-          process.deregister
-        end
-
-        # Clean up old processes from any host
-        SolidQueue::Process.where('last_heartbeat_at < ?', 5.minutes.ago).find_each do |process|
-          Rails.logger.info "Deregistering old process: #{process.name} (#{process.id})"
-          process.deregister
-        end
-
-        # Clean up claimed executions with no process
-        SolidQueue::ClaimedExecution
-          .joins('LEFT JOIN solid_queue_processes ON solid_queue_processes.id = process_id')
-          .where('solid_queue_processes.id IS NULL')
-          .delete_all
-
-        # Clean up expired blocked executions
-        SolidQueue::BlockedExecution.where('expires_at < ?', Time.current).delete_all
-      end
-
-      # Start SolidQueue processes in a background thread
+      # Initialize SolidQueue in a separate thread to avoid blocking the main thread
       Thread.new do
-        # Give Rails a moment to finish initializing
-        sleep 3
         begin
-          Rails.logger.info "Starting SolidQueue processes..."
+          # Give Rails a moment to finish initializing
+          sleep 3
+
+          # Clean up stale processes
+          if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
+            Rails.logger.info "Cleaning up stale SolidQueue processes..."
+
+            # First, clean up any orphaned processes from this host
+            hostname = Socket.gethostname
+            Rails.logger.info "Cleaning up processes for host: #{hostname}"
+
+            # Clean up processes from this host
+            SolidQueue::Process.where(hostname: hostname).find_each do |process|
+              Rails.logger.info "Deregistering stale process: #{process.name} (#{process.id})"
+              process.deregister
+            end
+
+            # Clean up old processes from any host
+            SolidQueue::Process.where('last_heartbeat_at < ?', 5.minutes.ago).find_each do |process|
+              Rails.logger.info "Deregistering old process: #{process.name} (#{process.id})"
+              process.deregister
+            end
+
+            # Clean up claimed executions with no process
+            orphaned_count = SolidQueue::ClaimedExecution
+              .joins('LEFT JOIN solid_queue_processes ON solid_queue_processes.id = process_id')
+              .where('solid_queue_processes.id IS NULL')
+              .delete_all
+            Rails.logger.info "Cleaned up #{orphaned_count} orphaned executions"
+
+            # Clean up expired blocked executions
+            expired_count = SolidQueue::BlockedExecution.where('expires_at < ?', Time.current).delete_all
+            Rails.logger.info "Cleaned up #{expired_count} expired blocked executions"
+
+            # Process any ready jobs that might be stuck
+            ready_count = SolidQueue::ReadyExecution.count
+            if ready_count > 0
+              Rails.logger.info "Found #{ready_count} ready jobs waiting to be processed"
+            end
+          end
 
           # Check disk space before starting
-          disk_info = `df -h #{Rails.root}`.split("\n")[1].split(/\s+/)
-          disk_usage_percent = disk_info[4].to_i
+          begin
+            df_output = `df -h #{Rails.root}`
+            if df_output.present? && df_output.split("\n").length > 1
+              disk_info = df_output.split("\n")[1].split(/\s+/)
+              disk_usage_percent = disk_info[4].to_i
 
-          if disk_usage_percent >= 90
-            Rails.logger.warn "Disk space is critically low (#{disk_usage_percent}% used). This may cause issues with SolidQueue."
-            Rails.logger.info "Cleaning up log files..."
-            system("find #{Rails.root}/log -name \"*.log\" -size +10M -exec truncate -s 0 {} \;")
+              if disk_usage_percent >= 90
+                Rails.logger.warn "Disk space is critically low (#{disk_usage_percent}% used). This may cause issues with SolidQueue."
+                Rails.logger.info "Cleaning up log files..."
+                system("find #{Rails.root}/log -name \"*.log\" -size +10M -exec truncate -s 0 {} \;")
 
-            Rails.logger.info "Cleaning up tmp directory..."
-            system("find #{Rails.root}/tmp -type f -name \"*.log\" -o -name \"*.pid\" -o -name \"*.lock\" -mtime +1 -delete")
+                Rails.logger.info "Cleaning up tmp directory..."
+                system("find #{Rails.root}/tmp -type f -name \"*.log\" -o -name \"*.pid\" -o -name \"*.lock\" -mtime +1 -delete")
+              end
+            else
+              Rails.logger.warn "Could not determine disk usage. Skipping disk space check."
+            end
+          rescue => e
+            Rails.logger.error "Error checking disk space: #{e.message}"
           end
 
           # Start SolidQueue with proper error handling
-          pid = Process.spawn("#{Rails.root}/bin/start_solid_queue",
-                             out: File.join(Rails.root, 'log', 'solid_queue.log'),
-                             err: File.join(Rails.root, 'log', 'solid_queue.log'))
-          Process.detach(pid)
+          Rails.logger.info "Starting SolidQueue processes..."
 
-          # Write PID to file
-          pid_dir = File.join(Rails.root, 'tmp', 'pids')
-          FileUtils.mkdir_p(pid_dir)
-          File.write(File.join(pid_dir, 'solid_queue.pid'), pid.to_s)
+          # First, check if database is available
+          database_available = false
+          begin
+            # Try a simple query to check if database is available
+            ActiveRecord::Base.connection.execute("SELECT 1")
+            database_available = true
+          rescue => e
+            Rails.logger.warn "Database not available: #{e.message}"
+            Rails.logger.warn "Will start SolidQueue in no-db mode"
+          end
 
-          Rails.logger.info "SolidQueue started with PID: #{pid}"
+          if database_available
+            # Use the resilient script if database is available
+            script_path = File.join(Rails.root, 'bin', 'resilient-solid-queue')
+          else
+            # Use the no-db script if database is not available
+            script_path = File.join(Rails.root, 'bin', 'no-db-solid-queue')
+          end
+
+          if File.exist?(script_path)
+            # Make sure the script is executable
+            File.chmod(0755, script_path) rescue nil
+
+            # Start the script in a separate process
+            pid = Process.spawn(script_path,
+                               out: File.join(Rails.root, 'log', 'solid_queue.log'),
+                               err: File.join(Rails.root, 'log', 'solid_queue.log'))
+            Process.detach(pid)
+
+            # Write PID to file
+            pid_dir = File.join(Rails.root, 'tmp', 'pids')
+            FileUtils.mkdir_p(pid_dir)
+            File.write(File.join(pid_dir, 'solid_queue.pid'), pid.to_s)
+
+            # Wait a moment for the processes to start
+            sleep 5
+
+            Rails.logger.info "SolidQueue started with PID: #{pid}"
+          else
+            Rails.logger.error "SolidQueue script not found at #{script_path}. SolidQueue will not be started."
+          end
         rescue => e
-          Rails.logger.error "Failed to start SolidQueue: #{e.message}"
+          Rails.logger.error "Error initializing SolidQueue: #{e.message}"
           Rails.logger.error e.backtrace.join("\n")
         end
       end
@@ -164,10 +216,53 @@ Rails.application.config.after_initialize do
         if Thread.current == Thread.main
           begin
             Rails.logger.info "Shutting down SolidQueue processes..."
-            system("bundle exec rake solid_queue:stop")
-            # Clean up any orphaned SolidQueue processes
-            if defined?(SolidQueue) && defined?(SolidQueue::Process)
-              SolidQueue::Process.where(hostname: Socket.gethostname).destroy_all
+
+            # Use the resilient stop script
+            stop_script = File.join(Rails.root, 'bin', 'stop-resilient-solid-queue')
+            if File.exist?(stop_script)
+              # Make sure the script is executable
+              File.chmod(0755, stop_script) rescue nil
+
+              # Run the script
+              system(stop_script)
+            else
+              # Fallback to manual cleanup
+
+              # First try to kill processes using PID files
+              pid_dir = File.join(Rails.root, 'tmp', 'pids')
+              ['solid_queue.pid', 'solid_queue_dispatcher.pid', 'solid_queue_worker.pid'].each do |pid_file|
+                full_path = File.join(pid_dir, pid_file)
+                if File.exist?(full_path)
+                  begin
+                    pid = File.read(full_path).to_i
+                    if pid > 0
+                      begin
+                        Process.kill('TERM', pid)
+                        Rails.logger.info "Sent TERM signal to process #{pid} (#{pid_file})"
+                        # Give it a moment to shut down gracefully
+                        sleep 1
+                      rescue Errno::ESRCH
+                        Rails.logger.info "Process #{pid} not found"
+                      end
+                    end
+                  rescue => e
+                    Rails.logger.error "Error killing process from #{pid_file}: #{e.message}"
+                  end
+                end
+              end
+
+              # Then use pkill as a fallback
+              system("pkill -f 'SolidQueue::' || true")
+              system("pkill -f 'solid_queue:' || true")
+
+              # Clean up any orphaned SolidQueue processes in the database
+              if defined?(SolidQueue) && defined?(SolidQueue::Process)
+                begin
+                  SolidQueue::Process.where(hostname: Socket.gethostname).destroy_all
+                rescue => e
+                  Rails.logger.error "Error cleaning up SolidQueue processes in database: #{e.message}"
+                end
+              end
             end
           rescue => e
             # Log error but don't prevent shutdown
@@ -176,7 +271,7 @@ Rails.application.config.after_initialize do
         end
       end
     rescue => e
-      Rails.logger.error "Error initializing SolidQueue: #{e.message}"
+      Rails.logger.error "Error setting up SolidQueue: #{e.message}"
       Rails.logger.error e.backtrace.join("\n")
     end
   end

@@ -1,0 +1,128 @@
+#!/usr/bin/env ruby
+# Script to start SolidQueue with proper controls
+
+require 'fileutils'
+require 'socket'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Starting SolidQueue with optimized settings..."
+
+# Clean up any existing SolidQueue processes
+puts "Cleaning up existing SolidQueue processes..."
+
+# First, try to clean up using the PID files
+dispatcher_pid_file = File.join(app_root, 'tmp', 'pids', 'solid_queue_dispatcher.pid')
+worker_pid_file = File.join(app_root, 'tmp', 'pids', 'solid_queue_worker.pid')
+
+if File.exist?(dispatcher_pid_file)
+  dispatcher_pid = File.read(dispatcher_pid_file).to_i
+  if dispatcher_pid > 0
+    begin
+      Process.kill('TERM', dispatcher_pid)
+      puts "Sent TERM signal to dispatcher process #{dispatcher_pid}"
+    rescue Errno::ESRCH
+      puts "Dispatcher process #{dispatcher_pid} not found"
+    end
+  end
+end
+
+if File.exist?(worker_pid_file)
+  worker_pid = File.read(worker_pid_file).to_i
+  if worker_pid > 0
+    begin
+      Process.kill('TERM', worker_pid)
+      puts "Sent TERM signal to worker process #{worker_pid}"
+    rescue Errno::ESRCH
+      puts "Worker process #{worker_pid} not found"
+    end
+  end
+end
+
+# Then use pkill as a fallback
+system("pkill -f 'SolidQueue::Dispatcher' 2>/dev/null || true")
+system("pkill -f 'SolidQueue::Worker' 2>/dev/null || true")
+sleep(2)
+
+# Make sure all processes are killed
+if system("pgrep -f 'SolidQueue' > /dev/null")
+  puts "Forcefully killing remaining SolidQueue processes..."
+  system("pkill -9 -f 'SolidQueue' 2>/dev/null || true")
+  sleep(2)
+end
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Remove old pid files
+FileUtils.rm_f(Dir.glob('tmp/pids/solid_queue_*.pid'))
+
+# Set environment variables for optimal performance
+ENV['SOLID_QUEUE_POLLING_INTERVAL'] = '5' # Reduce polling frequency
+ENV['SOLID_QUEUE_DISPATCHER_CONCURRENCY'] = '1' # Reduce concurrency
+ENV['SOLID_QUEUE_WORKER_CONCURRENCY'] = '1' # Reduce concurrency
+
+# Clean up database records for this host
+begin
+  require File.join(app_root, 'config', 'environment')
+  if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
+    hostname = Socket.gethostname
+    puts "Cleaning up database records for host: #{hostname}"
+    SolidQueue::Process.where(hostname: hostname).destroy_all
+
+    # Clean up claimed executions with no process
+    SolidQueue::ClaimedExecution
+      .joins('LEFT JOIN solid_queue_processes ON solid_queue_processes.id = process_id')
+      .where('solid_queue_processes.id IS NULL')
+      .delete_all
+
+    # Clean up expired blocked executions
+    SolidQueue::BlockedExecution.where('expires_at < ?', Time.current).delete_all
+  end
+rescue => e
+  puts "Error cleaning up database records: #{e.message}"
+  puts e.backtrace.join("\n")
+end
+
+# Start the SolidQueue dispatcher
+puts "Starting SolidQueue dispatcher..."
+dispatcher_pid = spawn(
+  "bundle exec rails runner 'SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start'",
+  out: File.join(app_root, 'log', 'solid_queue_dispatcher.log'),
+  err: File.join(app_root, 'log', 'solid_queue_dispatcher.log')
+)
+Process.detach(dispatcher_pid)
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_dispatcher.pid'), dispatcher_pid.to_s)
+puts "SolidQueue dispatcher started with PID: #{dispatcher_pid}"
+
+# Wait a moment to ensure the dispatcher is running
+sleep(2)
+
+# Start the SolidQueue worker
+puts "Starting SolidQueue worker..."
+worker_pid = spawn(
+  "bundle exec rails runner 'SolidQueue::Worker.new(concurrency: 1).start'",
+  out: File.join(app_root, 'log', 'solid_queue_worker.log'),
+  err: File.join(app_root, 'log', 'solid_queue_worker.log')
+)
+Process.detach(worker_pid)
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_worker.pid'), worker_pid.to_s)
+puts "SolidQueue worker started with PID: #{worker_pid}"
+
+# Verify processes are running
+sleep(5)
+if system("ps -p #{dispatcher_pid} > /dev/null") && system("ps -p #{worker_pid} > /dev/null")
+  puts "SolidQueue processes started successfully."
+  exit(0)
+else
+  puts "Failed to start SolidQueue processes."
+  # Check the logs for errors
+  puts "\nDispatcher log:"
+  system("tail -n 10 #{File.join(app_root, 'log', 'solid_queue_dispatcher.log')}")
+  puts "\nWorker log:"
+  system("tail -n 10 #{File.join(app_root, 'log', 'solid_queue_worker.log')}")
+  exit(1)
+end

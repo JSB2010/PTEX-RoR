@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby
+# Basic script to start SolidQueue and register processes
+
+require 'fileutils'
+require 'socket'
+
+# Change to the Rails root directory
+app_root = File.expand_path('..', __dir__)
+Dir.chdir(app_root)
+
+puts "Starting basic SolidQueue..."
+
+# Create necessary directories
+FileUtils.mkdir_p('tmp/pids')
+FileUtils.mkdir_p('log')
+
+# Remove old pid files
+FileUtils.rm_f(Dir.glob('tmp/pids/solid_queue_*.pid'))
+
+# Load Rails environment
+require File.join(app_root, 'config', 'environment')
+
+# Clean up any existing processes from this host
+if defined?(SolidQueue::Process) && ActiveRecord::Base.connection.table_exists?('solid_queue_processes')
+  hostname = Socket.gethostname
+  puts "Cleaning up existing SolidQueue processes for host: #{hostname}"
+  SolidQueue::Process.where(hostname: hostname).destroy_all
+end
+
+# Start the SolidQueue dispatcher
+puts "Starting SolidQueue dispatcher..."
+dispatcher_pid = spawn(
+  "cd #{app_root} && bin/rails runner 'SolidQueue::Dispatcher.new(polling_interval: 5).start'",
+  out: File.join(app_root, 'log', 'solid_queue_dispatcher.log'),
+  err: File.join(app_root, 'log', 'solid_queue_dispatcher.log')
+)
+Process.detach(dispatcher_pid)
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_dispatcher.pid'), dispatcher_pid.to_s)
+puts "SolidQueue dispatcher started with PID: #{dispatcher_pid}"
+
+# Start the SolidQueue worker
+puts "Starting SolidQueue worker..."
+worker_pid = spawn(
+  "cd #{app_root} && bin/rails runner 'SolidQueue::Worker.new(concurrency: 1).start'",
+  out: File.join(app_root, 'log', 'solid_queue_worker.log'),
+  err: File.join(app_root, 'log', 'solid_queue_worker.log')
+)
+Process.detach(worker_pid)
+File.write(File.join(app_root, 'tmp', 'pids', 'solid_queue_worker.pid'), worker_pid.to_s)
+puts "SolidQueue worker started with PID: #{worker_pid}"
+
+# Manually register the processes in the database
+puts "Registering SolidQueue processes in the database..."
+require File.join(app_root, 'config', 'environment')
+
+# Register dispatcher
+dispatcher = SolidQueue::Process.create!(
+  kind: "Dispatcher",
+  name: "dispatcher-#{Socket.gethostname}",
+  pid: dispatcher_pid,
+  hostname: Socket.gethostname,
+  last_heartbeat_at: Time.current,
+  metadata: { polling_interval: 5 }.to_json
+)
+puts "Registered dispatcher process with ID: #{dispatcher.id}"
+
+# Register worker
+worker = SolidQueue::Process.create!(
+  kind: "Worker",
+  name: "worker-#{Socket.gethostname}",
+  pid: worker_pid,
+  hostname: Socket.gethostname,
+  last_heartbeat_at: Time.current,
+  metadata: { concurrency: 1, queues: ["default"] }.to_json
+)
+puts "Registered worker process with ID: #{worker.id}"
+
+# Start a heartbeat thread
+puts "Starting heartbeat thread..."
+Thread.new do
+  loop do
+    begin
+      dispatcher.update!(last_heartbeat_at: Time.current)
+      worker.update!(last_heartbeat_at: Time.current)
+      puts "Updated heartbeats at #{Time.current}"
+      sleep 15
+    rescue => e
+      puts "Error updating heartbeats: #{e.message}"
+      break
+    end
+  end
+end
+
+puts "SolidQueue processes started and registered."

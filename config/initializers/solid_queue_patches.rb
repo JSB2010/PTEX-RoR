@@ -5,13 +5,13 @@ module SolidQueue
     self.table_name = "solid_queue_processes"
 
     validates :kind, :name, presence: true
-    
-    def self.register(kind:, name:, metadata: {})
+
+    def self.register(kind:, name:, metadata: {}, pid: nil, hostname: nil, supervisor: nil)
       create!(
         kind: kind,
         name: name,
-        hostname: Socket.gethostname,
-        pid: ::Process.pid,
+        hostname: hostname || Socket.gethostname,
+        pid: pid || ::Process.pid,
         last_heartbeat_at: Time.current,
         metadata: metadata.is_a?(String) ? metadata : metadata.to_json
       )
@@ -39,16 +39,16 @@ module SolidQueue
       trap("TERM") { @stop_signal_received = true }
       trap("INT") { @stop_signal_received = true }
     end
-    
+
     def should_stop?
       @stop_signal_received
     end
-    
+
     def cleanup
       deregister_process
       ActiveRecord::Base.connection_pool.disconnect!
     end
-    
+
     def register_process(kind)
       @process_record = SolidQueue::Process.register(
         kind: kind,
@@ -56,11 +56,11 @@ module SolidQueue
         metadata: {}
       )
     end
-    
+
     def deregister_process
       @process_record&.deregister
     end
-    
+
     def heartbeat
       return unless @process_record
       @process_record.heartbeat!
@@ -87,7 +87,7 @@ module SolidQueue
 
       serialized_args = job.arguments.is_a?(String) ? JSON.parse(job.arguments) : job.arguments
       job.update(arguments: serialized_args.to_json) unless job.arguments.is_a?(String)
-      
+
       super
     rescue JSON::ParserError => e
       Rails.logger.error "Failed to parse job arguments: #{e.message}"
@@ -112,11 +112,11 @@ module SolidQueue
     def start
       setup_signal_handlers
       @logger = Rails.logger
-      
+
       ActiveRecord::Base.connection_pool.with_connection do
         register_process("worker")
         @logger.info "Starting SolidQueue worker #{@name} with queues=#{@queues.inspect}"
-        
+
         until should_stop?
           begin
             heartbeat
@@ -131,11 +131,11 @@ module SolidQueue
     ensure
       cleanup
     end
-    
+
     def poll
       @thread_pool.ready_workers.each do |worker|
         next unless job = next_job
-        
+
         begin
           job.arguments = JSON.parse(job.arguments) if job.arguments.is_a?(String)
           worker.perform(job)
@@ -155,20 +155,23 @@ module SolidQueue
     prepend ProcessManagement
     prepend SafeDatabase
 
-    alias_method :original_initialize, :initialize
-    def initialize(polling_interval: 0.1, batch_size: 100, name: nil)
+    # Simple initialize method that works with all SolidQueue versions
+    def initialize(polling_interval: 0.1, batch_size: 100, name: nil, **kwargs)
       @name = name
-      original_initialize(polling_interval: polling_interval, batch_size: batch_size)
+      @polling_interval = polling_interval
+      @batch_size = batch_size
+      @logger = Rails.logger
+      @running = true
     end
 
     def start
       setup_signal_handlers
       @logger = Rails.logger
-      
+
       ActiveRecord::Base.connection_pool.with_connection do
         register_process("dispatcher")
         @logger.info "Starting SolidQueue dispatcher #{@name} with interval=#{@polling_interval}"
-        
+
         until should_stop?
           begin
             heartbeat
@@ -186,13 +189,27 @@ module SolidQueue
 
     def poll(batch = nil)
       return [] if should_stop?
-      
+
       begin
         results = []
-        results.concat(dispatch_scheduled_jobs)
-        results.concat(dispatch_recurring_jobs)
-        results.concat(cleanup_stale_jobs)
-        
+
+        # Handle method name differences between SolidQueue versions
+        if respond_to?(:dispatch_scheduled_jobs)
+          results.concat(dispatch_scheduled_jobs)
+        elsif respond_to?(:dispatch_scheduled)
+          results.concat(dispatch_scheduled)
+        end
+
+        if respond_to?(:dispatch_recurring_jobs)
+          results.concat(dispatch_recurring_jobs)
+        elsif respond_to?(:dispatch_recurring)
+          results.concat(dispatch_recurring)
+        end
+
+        if respond_to?(:cleanup_stale_jobs)
+          results.concat(cleanup_stale_jobs)
+        end
+
         sleep(@polling_interval) if results.empty? && !should_stop?
         results
       rescue => e
