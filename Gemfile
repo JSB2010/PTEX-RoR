@@ -32,7 +32,7 @@ gem "sass-rails"
 gem "dotenv-rails"
 
 # Frontend
-gem "bootstrap", "~> 5.3.0"
+gem "bootstrap", "~> 5.3.5"
 gem "sassc-rails"
 
 # Timezone data
