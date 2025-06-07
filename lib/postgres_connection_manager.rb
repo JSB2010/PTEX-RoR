@@ -77,7 +77,7 @@ module PostgresConnectionManager
         db_name = ActiveRecord::Base.connection.current_database
 
         # Get connection count
-        result = ActiveRecord::Base.connection.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = '#{db_name}'")
+        result = ActiveRecord::Base.connection.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = $1", [db_name])
         connections = result.first["count"].to_i
 
         # Get max connections
@@ -88,11 +88,11 @@ module PostgresConnectionManager
         percentage = (connections.to_f / max_connections) * 100
 
         # Get idle connections
-        idle_result = ActiveRecord::Base.connection.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = '#{db_name}' AND state = 'idle'")
+        idle_result = ActiveRecord::Base.connection.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = $1 AND state = 'idle'", [db_name])
         idle_connections = idle_result.first["count"].to_i
 
         # Get active connections
-        active_result = ActiveRecord::Base.connection.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = '#{db_name}' AND state = 'active'")
+        active_result = ActiveRecord::Base.connection.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = $1 AND state = 'active'", [db_name])
         active_connections = active_result.first["count"].to_i
 
         # Get connection pool info

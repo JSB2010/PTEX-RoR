@@ -48,12 +48,16 @@ module ActiveRecord
   module QueryOptimization
     # Add index hints to queries
     def with_index_hint(index_name)
-      from("#{table_name} USE INDEX (#{index_name})")
+      quoted_table = connection.quote_table_name(table_name)
+      quoted_index = connection.quote_column_name(index_name)
+      from("#{quoted_table} USE INDEX (#{quoted_index})")
     end
 
     # Force index usage
     def force_index(index_name)
-      from("#{table_name} FORCE INDEX (#{index_name})")
+      quoted_table = connection.quote_table_name(table_name)
+      quoted_index = connection.quote_column_name(index_name)
+      from("#{quoted_table} FORCE INDEX (#{quoted_index})")
     end
 
     # Add query timeout

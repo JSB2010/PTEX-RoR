@@ -74,7 +74,11 @@ Rails.application.config.after_initialize do
           sleep ENV.fetch('DB_CLEANUP_INTERVAL', 600).to_i # 10 minutes
           ActiveRecord::Base.connection_pool.disconnect!
           ActiveRecord::Base.connection_pool.clear_reloadable_connections!
-          ActiveRecord::Base.clear_active_connections!
+
+          # Clear active connections (Rails 8 compatible)
+          if ActiveRecord::Base.respond_to?(:clear_active_connections!)
+            ActiveRecord::Base.clear_active_connections!
+          end
 
           # Kill idle connections at the PostgreSQL level
           begin
@@ -82,14 +86,15 @@ Rails.application.config.after_initialize do
             db_name = ActiveRecord::Base.connection.current_database
 
             # Kill idle connections that have been idle for more than 5 minutes
-            ActiveRecord::Base.connection.execute(<<-SQL)
-              SELECT pg_terminate_backend(pid)
-              FROM pg_stat_activity
-              WHERE datname = '#{db_name}'
-              AND pid <> pg_backend_pid()
-              AND state = 'idle'
-              AND (now() - state_change) > interval '5 minutes';
-            SQL
+            ActiveRecord::Base.connection.execute(
+              "SELECT pg_terminate_backend(pid)
+               FROM pg_stat_activity
+               WHERE datname = $1
+               AND pid <> pg_backend_pid()
+               AND state = 'idle'
+               AND (now() - state_change) > interval '5 minutes'",
+              [db_name]
+            )
           rescue => e
             Rails.logger.error "Error cleaning up PostgreSQL connections: #{e.message}"
           end

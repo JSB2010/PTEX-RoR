@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# Simple Sidekiq startup script
+cd "$(dirname "$0")/.."
+
+echo "Starting Sidekiq..."
+bundle exec sidekiq -C config/sidekiq.yml

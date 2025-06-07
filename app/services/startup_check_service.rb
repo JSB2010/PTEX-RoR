@@ -116,7 +116,8 @@ class StartupCheckService
 
   def estimated_table_size(table_name)
     result = ActiveRecord::Base.connection.execute(
-      "SELECT pg_total_relation_size('#{table_name}') AS size"
+      "SELECT pg_total_relation_size($1) AS size",
+      [table_name]
     ).first
     result['size'].to_i
   rescue => e

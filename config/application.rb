@@ -44,18 +44,10 @@ module PtexRoR
     end
 
     # Active Job configuration
-    if ENV['SKIP_SOLID_QUEUE'] == 'true'
+    if ENV['SKIP_SIDEKIQ'] == 'true'
       config.active_job.queue_adapter = :inline
     else
-      begin
-        # Check if SolidQueue is available
-        require 'solid_queue'
-        config.active_job.queue_adapter = :solid_queue
-      rescue LoadError => e
-        # Fall back to inline adapter if SolidQueue is not available
-        Rails.logger.warn "SolidQueue not available: #{e.message}. Using inline adapter instead."
-        config.active_job.queue_adapter = :inline
-      end
+      config.active_job.queue_adapter = :sidekiq
     end
 
     # Redis cache store configuration
@@ -85,10 +77,7 @@ module PtexRoR
         pool.connection.reconnect! if pool&.connected?
       end
 
-      # Configure SolidQueue connection handling
-      ActiveSupport::Notifications.subscribe('solid_queue.background_task') do |*args|
-        ActiveRecord::Base.connection_pool.release_connection if ActiveRecord::Base.connection_pool.active_connection?
-      end
+      # Sidekiq handles its own connection management
     end
 
     # Configure graceful shutdown

@@ -92,24 +92,31 @@ class Grade < ApplicationRecord
   end
 
   def self.recalculate_course_stats(course_id)
-    # Efficiently calculate all stats in one query
-    stats = select(:id, :numeric_grade, :letter_grade)
-           .where(course_id: course_id)
-           .group(:letter_grade)
-           .select(
-             'AVG(numeric_grade) as avg_grade',
-             'COUNT(*) as grade_count',
-             'COUNT(CASE WHEN numeric_grade >= 60 THEN 1 END) as passing_count'
-           )
-           .first
+    # Use raw SQL to avoid ActiveRecord ordering conflicts
+    sql = <<~SQL
+      SELECT
+        AVG(numeric_grade) as avg_grade,
+        COUNT(*) as grade_count,
+        COUNT(CASE WHEN numeric_grade >= 60 THEN 1 END) as passing_count
+      FROM grades
+      WHERE course_id = $1
+    SQL
 
-    return unless stats
+    result = connection.exec_query(sql, 'Grade Stats', [course_id])
+    return if result.rows.empty?
+
+    row = result.rows.first
+    avg_grade = row[0]&.to_f&.round(2) || 0.0
+    grade_count = row[1]&.to_i || 0
+    passing_count = row[2]&.to_i || 0
+
+    return if grade_count == 0
 
     # Update all cache entries atomically
     Rails.cache.write_multi({
-      "course:#{course_id}:average" => stats.avg_grade.to_f.round(2),
-      "course:#{course_id}:grade_distribution" => stats.grade_count,
-      "course:#{course_id}:passing_rate" => ((stats.passing_count / stats.grade_count.to_f) * 100).round(1)
+      "course:#{course_id}:average" => avg_grade,
+      "course:#{course_id}:grade_distribution" => grade_count,
+      "course:#{course_id}:passing_rate" => ((passing_count / grade_count.to_f) * 100).round(1)
     }, expires_in: 12.hours)
   end
 end

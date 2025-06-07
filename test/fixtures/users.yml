@@ -1,29 +1,29 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
-admin:
+one:
   email: admin@example.com
   first_name: Admin
   last_name: User
-  role: admin
-  encrypted_password: <%= User.new.send(:password_digest, 'password123') %>
+  role: Admin
+  encrypted_password: $2a$04$nxSuWLdLe.b/Bcxm71TUXeeh2j/hmkvkt8B9B2jFXIRAnIdfWgmSG
 
-teacher:
+two:
   email: teacher@example.com
   first_name: John
   last_name: Smith
-  role: teacher
-  encrypted_password: <%= User.new.send(:password_digest, 'password123') %>
+  role: Teacher
+  encrypted_password: $2a$04$nxSuWLdLe.b/Bcxm71TUXeeh2j/hmkvkt8B9B2jFXIRAnIdfWgmSG
+
+teacher:
+  email: teacher2@example.com
+  first_name: Jane
+  last_name: Teacher
+  role: Teacher
+  encrypted_password: $2a$04$nxSuWLdLe.b/Bcxm71TUXeeh2j/hmkvkt8B9B2jFXIRAnIdfWgmSG
 
 student:
   email: student@example.com
-  first_name: Jane
-  last_name: Doe
-  role: student
-  encrypted_password: <%= User.new.send(:password_digest, 'password123') %>
-
-student_two:
-  email: student2@example.com
-  first_name: Alex
-  last_name: Johnson
-  role: student
-  encrypted_password: <%= User.new.send(:password_digest, 'password123') %>
+  first_name: Bob
+  last_name: Student
+  role: Student
+  encrypted_password: $2a$04$nxSuWLdLe.b/Bcxm71TUXeeh2j/hmkvkt8B9B2jFXIRAnIdfWgmSG

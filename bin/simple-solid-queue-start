@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+# Simple SolidQueue starter script - no recursion, no complexity
+set -e
+
+APP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$APP_ROOT"
+
+echo "Starting SolidQueue processes..."
+
+# Create necessary directories
+mkdir -p tmp/pids log
+
+# Clean up any existing processes first
+echo "Cleaning up existing processes..."
+pkill -f "SolidQueue::" 2>/dev/null || true
+pkill -f "solid_queue:" 2>/dev/null || true
+
+# Remove old PID files
+rm -f tmp/pids/solid_queue*.pid
+
+# Start dispatcher
+echo "Starting SolidQueue dispatcher..."
+bundle exec rails runner "
+  require 'solid_queue'
+  dispatcher = SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5)
+  dispatcher.start
+" > log/solid_queue_dispatcher.log 2>&1 &
+
+DISPATCHER_PID=$!
+echo $DISPATCHER_PID > tmp/pids/solid_queue_dispatcher.pid
+echo "Dispatcher started with PID: $DISPATCHER_PID"
+
+# Wait a moment
+sleep 2
+
+# Start worker
+echo "Starting SolidQueue worker..."
+bundle exec rails runner "
+  require 'solid_queue'
+  worker = SolidQueue::Worker.new(concurrency: 1)
+  worker.start
+" > log/solid_queue_worker.log 2>&1 &
+
+WORKER_PID=$!
+echo $WORKER_PID > tmp/pids/solid_queue_worker.pid
+echo "Worker started with PID: $WORKER_PID"
+
+echo "SolidQueue started successfully!"
+echo "Dispatcher PID: $DISPATCHER_PID"
+echo "Worker PID: $WORKER_PID"
+echo "Logs: log/solid_queue_dispatcher.log, log/solid_queue_worker.log"

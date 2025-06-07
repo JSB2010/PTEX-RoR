@@ -63,7 +63,14 @@ module Admin
     end
 
     def user_params
-      params.require(:user).permit(:email, :first_name, :last_name, :role, :password, :password_confirmation)
+      permitted_params = [:email, :first_name, :last_name, :password, :password_confirmation]
+
+      # Only allow role assignment for admins
+      if current_user&.admin?
+        permitted_params << :role
+      end
+
+      params.require(:user).permit(permitted_params)
     end
 
     def ensure_admin

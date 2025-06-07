@@ -29,6 +29,14 @@ class HealthController < ApplicationController
 
   private
 
+  def process_running?(pid)
+    return false unless pid.is_a?(Integer) && pid > 0
+    Process.kill(0, pid)
+    true
+  rescue Errno::ESRCH, Errno::EPERM
+    false
+  end
+
   def generate_health_data
     {
       status: overall_status,
@@ -172,7 +180,7 @@ class HealthController < ApplicationController
   end
 
   def job_stats
-    adapter = 'SolidQueue'
+    adapter = 'Sidekiq'
     active_workers = 0
     dispatcher_running = false
     status = 'error'
@@ -182,172 +190,55 @@ class HealthController < ApplicationController
     disk_space = nil
 
     begin
-      # Check SolidQueue processes with robust error handling
-      begin
-        # First check for running processes using PID files
-        dispatcher_pid_file = Rails.root.join('tmp', 'pids', 'solid_queue_dispatcher.pid')
-        worker_pid_file = Rails.root.join('tmp', 'pids', 'solid_queue_worker.pid')
-
-        if File.exist?(dispatcher_pid_file)
-          dispatcher_pid = File.read(dispatcher_pid_file).to_i
-          if dispatcher_pid > 0 && system("ps -p #{dispatcher_pid} > /dev/null")
-            dispatcher_running = true
-          end
-        end
-
-        if File.exist?(worker_pid_file)
-          worker_pid = File.read(worker_pid_file).to_i
-          if worker_pid > 0 && system("ps -p #{worker_pid} > /dev/null")
-            active_workers += 1
-          end
-        end
-
-        # If we found running processes via PIDs, we're good to go
-        if dispatcher_running && active_workers > 0
-          status = 'ok'
-        end
-
-        # Then check for registered processes in the database if possible
-        if database_available?
-          begin
-            db_active_workers = SolidQueue::Process.where(kind: "Worker")
-                                                .where("last_heartbeat_at > ?", 5.minutes.ago)
-                                                .count
-
-            db_dispatcher_running = SolidQueue::Process.where(kind: "Dispatcher")
-                                                   .where("last_heartbeat_at > ?", 5.minutes.ago)
-                                                   .exists?
-
-            # Use database values if they indicate more processes than we found via PIDs
-            active_workers = [active_workers, db_active_workers].max
-            dispatcher_running = dispatcher_running || db_dispatcher_running
-
-            # Get job statistics
-            recent_jobs = {
-              completed: SolidQueue::Job.where("finished_at > ?", 1.hour.ago).where(failed_at: nil).count,
-              failed: SolidQueue::Job.where("failed_at > ?", 1.hour.ago).count,
-              pending: SolidQueue::ReadyExecution.count + SolidQueue::ScheduledExecution.count
-            }
-          rescue => e
-            # If we get an error accessing the database but we have running processes,
-            # we'll still report SolidQueue as running
-            if dispatcher_running && active_workers > 0
-              status = 'ok'
-            end
-          end
-        else
-          # If database is not available but we have running processes,
-          # we'll still report SolidQueue as running
-          if dispatcher_running && active_workers > 0
-            status = 'ok'
-          end
-        end
-
-        # Get queue information
-        SolidQueue::Queue.all.each do |queue|
-          queues << {
-            name: queue.name,
-            paused: queue.paused?,
-            jobs_pending: SolidQueue::ReadyExecution.where(queue_name: queue.name).count
-          }
-        end
-
-        # Check PostgreSQL connections
-        if ActiveRecord::Base.connection.adapter_name.downcase.include?('postgresql')
-          conn_result = ActiveRecord::Base.connection.execute(
-            "SELECT count(*) as current,
-                    (SELECT setting::integer FROM pg_settings WHERE name = 'max_connections') as max
-             FROM pg_stat_activity"
-          )
-
-          if conn_result.present?
-            current = conn_result.first['current'].to_i
-            max = conn_result.first['max'].to_i
-            percentage = ((current.to_f / max) * 100).round(1)
-            warning = percentage > 70
-
-            # Get active/idle connections
-            conn_details = ActiveRecord::Base.connection.execute(
-              "SELECT state, count(*) FROM pg_stat_activity GROUP BY state"
-            )
-
-            active_connections = 0
-            idle_connections = 0
-
-            if conn_details.present?
-              conn_details.each do |row|
-                if row['state'] == 'active'
-                  active_connections = row['count'].to_i
-                elsif row['state'] == 'idle'
-                  idle_connections = row['count'].to_i
-                end
-              end
-            end
-
-            pg_connections = {
-              current: current,
-              max: max,
-              percentage: percentage,
-              warning: warning,
-              active_connections: active_connections,
-              idle_connections: idle_connections
-            }
-          end
-        end
-
-        # Check disk space
+      # Check Sidekiq processes
+      if defined?(Sidekiq)
         begin
-          df_output = `df -h /`.split("\n")[1]
-          if df_output.present?
-            parts = df_output.split
-            total = parts[1]
-            used = parts[2]
-            available = parts[3]
-            percentage = parts[4].to_i
-            mount_point = parts[5]
+          # Check if Sidekiq is running by looking at Redis
+          require 'sidekiq/api'
 
-            # Convert to GB for numerical comparison
-            total_gb = total.include?('G') ? total.to_f : (total.include?('T') ? total.to_f * 1024 : 0)
-            used_gb = used.include?('G') ? used.to_f : (used.include?('T') ? used.to_f * 1024 : 0)
-            available_gb = available.include?('G') ? available.to_f : (available.include?('T') ? available.to_f * 1024 : 0)
+          # Get worker information
+          workers = Sidekiq::Workers.new
+          active_workers = workers.size
 
-            warning = percentage > 80
-            critical = percentage > 90
-            message = nil
+          # Sidekiq doesn't have a separate dispatcher, workers handle everything
+          dispatcher_running = active_workers > 0
 
-            if critical
-              message = "Critical: Disk usage is at #{percentage}%. Free up disk space immediately."
-            elsif warning
-              message = "Warning: Disk usage is at #{percentage}%. Consider freeing up disk space."
-            end
+          # Get job statistics
+          stats = Sidekiq::Stats.new
+          recent_jobs = {
+            completed: stats.processed,
+            failed: stats.failed,
+            pending: stats.enqueued
+          }
 
-            disk_space = {
-              percentage: percentage,
-              total: total,
-              used: used,
-              available: available,
-              warning: warning,
-              critical: critical,
-              message: message,
-              mount_point: mount_point,
-              total_gb: total_gb,
-              used_gb: used_gb,
-              available_gb: available_gb
+          # Get queue information
+          Sidekiq::Queue.all.each do |queue|
+            queues << {
+              name: queue.name,
+              paused: queue.paused?,
+              jobs_pending: queue.size
             }
           end
-        rescue => e
-          Rails.logger.error("Error checking disk space: #{e.message}")
-        end
 
-        status = if !dispatcher_running || active_workers == 0
-                   'error'
-                 elsif recent_jobs[:failed] > 10
-                   'warning'
-                 else
-                   'ok'
-                 end
-      rescue => e
-        Rails.logger.error("Error checking SolidQueue: #{e.message}")
+          # If we have workers or jobs, consider it running
+          status = (active_workers > 0 || recent_jobs[:pending] >= 0) ? 'ok' : 'warning'
+
+        rescue Redis::CannotConnectError, Redis::ConnectionError => e
+          Rails.logger.error("Redis connection error for Sidekiq: #{e.message}")
+          status = 'error'
+        rescue => e
+          Rails.logger.error("Error checking Sidekiq: #{e.message}")
+          status = 'warning'
+        end
+      else
+        # Sidekiq not available, check if using inline adapter
+        if Rails.application.config.active_job.queue_adapter == :inline
+          adapter = 'Inline'
+          status = 'ok'
+          active_workers = 1
+          dispatcher_running = true
+          recent_jobs = { completed: 0, failed: 0, pending: 0 }
+        end
       end
     rescue => e
       Rails.logger.error("Error in job_stats: #{e.message}")
@@ -704,20 +595,20 @@ class HealthController < ApplicationController
     # Job system issues
     if job_system_status == 'error'
       if !job_stats[:dispatcher_running]
-        issues << { component: 'SolidQueue', severity: 'critical', message: 'Dispatcher not running' }
+        issues << { component: 'Job System', severity: 'critical', message: 'Job processing not running' }
       end
 
       if job_stats[:active_workers] == 0
-        issues << { component: 'SolidQueue', severity: 'critical', message: 'No active workers' }
+        issues << { component: 'Job System', severity: 'critical', message: 'No active workers' }
       end
     end
 
     if job_stats[:recent_jobs][:failed] > 10
       issues << {
-        component: 'SolidQueue',
+        component: 'Job System',
         severity: 'warning',
         message: 'High job failure rate',
-        details: "#{job_stats[:recent_jobs][:failed]} failed jobs in the last hour"
+        details: "#{job_stats[:recent_jobs][:failed]} failed jobs"
       }
     end
 

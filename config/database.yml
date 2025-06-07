@@ -22,6 +22,9 @@ development:
   database: ptex_development
   # Use localhost for TCP/IP connection
   host: localhost
+  # Smaller pool for development to prevent exhaustion
+  pool: 2
+  checkout_timeout: 1
 
 test:
   <<: *default

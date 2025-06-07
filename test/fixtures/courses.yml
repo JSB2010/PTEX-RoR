@@ -1,28 +1,16 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
-math_101:
+one:
   name: Mathematics 101
   description: Introduction to basic mathematics
-  user: teacher
-  level: beginner
+  user_id: <%= ActiveRecord::FixtureSet.identify(:one, :users) %>
 
-physics_201:
+two:
   name: Physics 201
   description: Intermediate physics course
-  user: teacher
-  level: intermediate
+  user_id: <%= ActiveRecord::FixtureSet.identify(:two, :users) %>
 
 math:
   name: Mathematics
-  teacher: teacher
-  level: Regular
-
-history:
-  name: World History
-  teacher: teacher
-  level: Honors
-
-physics:
-  name: AP Physics
-  teacher: teacher
-  level: AP
+  description: Basic mathematics course
+  user_id: <%= ActiveRecord::FixtureSet.identify(:teacher, :users) %>

@@ -151,7 +151,7 @@ module Admin
       tables = ActiveRecord::Base.connection.tables
       tables.each_with_object({}) do |table, counts|
         counts[table] = ActiveRecord::Base.connection.select_value(
-          "SELECT COUNT(*) FROM #{table}"
+          "SELECT COUNT(*) FROM #{ActiveRecord::Base.connection.quote_table_name(table)}"
         )
       end
     end
@@ -260,7 +260,9 @@ module Admin
     end
 
     def fetch_process_count
-      `ps aux | grep #{Rails.application.class.module_parent_name} | wc -l`.to_i
+      # Safely get process count without command injection
+      app_name = Rails.application.class.module_parent_name
+      `ps aux`.lines.count { |line| line.include?(app_name) }
     rescue
       0
     end

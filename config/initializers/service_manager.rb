@@ -179,8 +179,9 @@ at_exit do
   ServiceManager.stop_services
 end
 
+# DISABLED: This was causing recursive process spawning
 # Start services after Rails fully initializes
-Rails.application.config.after_initialize do
-  # Skip starting services if SKIP_SOLID_QUEUE is set or if running rake
-  ServiceManager.start_services unless $0.include?('rake') || ENV['SKIP_SOLID_QUEUE'] == 'true'
-end
+# Rails.application.config.after_initialize do
+#   # Skip starting services if SKIP_SOLID_QUEUE is set or if running rake
+#   ServiceManager.start_services unless $0.include?('rake') || ENV['SKIP_SOLID_QUEUE'] == 'true'
+# end

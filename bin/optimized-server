@@ -10,21 +10,17 @@ log() {
 cleanup() {
   log "Cleaning up resources..."
 
-  # Kill SolidQueue processes if they were started by this script
-  if [ -n "$SOLID_QUEUE_PID" ]; then
-    log "Stopping SolidQueue processes..."
-    for pid in $SOLID_QUEUE_PID; do
-      log "Stopping SolidQueue process (PID: $pid)..."
+  # Kill Sidekiq processes if they were started by this script
+  if [ -n "$SIDEKIQ_PID" ]; then
+    log "Stopping Sidekiq processes..."
+    for pid in $SIDEKIQ_PID; do
+      log "Stopping Sidekiq process (PID: $pid)..."
       kill -TERM $pid 2>/dev/null || true
     done
   fi
 
   # Remove PID files
-  rm -f tmp/pids/solid_queue_*.pid 2>/dev/null || true
-
-  # Clean up database
-  log "Cleaning up SolidQueue database records..."
-  bundle exec rails runner "begin; ActiveRecord::Base.connection.execute('DELETE FROM solid_queue_processes') rescue nil; end" 2>/dev/null || true
+  rm -f tmp/pids/sidekiq*.pid 2>/dev/null || true
 
   log "Cleanup complete"
 }
@@ -97,33 +93,22 @@ for log_file in log/*.log; do
   fi
 done
 
-# Start SolidQueue if needed
-if [ "${SKIP_SOLID_QUEUE:-false}" != "true" ]; then
-  log "Starting SolidQueue with optimized settings..."
+# Start Sidekiq if needed
+if [ "${SKIP_SIDEKIQ:-false}" != "true" ]; then
+  log "Starting Sidekiq with optimized settings..."
 
-  # Clean up any existing SolidQueue processes
-  log "Cleaning up existing SolidQueue processes..."
-  pkill -f "SolidQueue::Dispatcher" 2>/dev/null || true
-  pkill -f "SolidQueue::Worker" 2>/dev/null || true
-  bundle exec rails runner "begin; ActiveRecord::Base.connection.execute('DELETE FROM solid_queue_processes') rescue nil; end" 2>/dev/null || true
+  # Clean up any existing Sidekiq processes
+  log "Cleaning up existing Sidekiq processes..."
+  pkill -f "sidekiq" 2>/dev/null || true
 
-  # Start SolidQueue with optimized settings
-  log "Starting SolidQueue dispatcher with reduced concurrency..."
-  nohup bundle exec rails runner "SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start" > log/solid_queue_dispatcher.log 2>&1 &
-  DISPATCHER_PID=$!
-  echo $DISPATCHER_PID > tmp/pids/solid_queue_dispatcher.pid
-  log "SolidQueue dispatcher started (PID: $DISPATCHER_PID)"
-
-  log "Starting SolidQueue worker with reduced concurrency..."
-  nohup bundle exec rails runner "SolidQueue::Worker.new(concurrency: 1).start" > log/solid_queue_worker.log 2>&1 &
-  WORKER_PID=$!
-  echo $WORKER_PID > tmp/pids/solid_queue_worker.pid
-  log "SolidQueue worker started (PID: $WORKER_PID)"
-
-  # Store the PIDs for cleanup
-  SOLID_QUEUE_PID="$DISPATCHER_PID $WORKER_PID"
+  # Start Sidekiq with optimized settings
+  log "Starting Sidekiq with reduced concurrency..."
+  nohup bundle exec sidekiq -c 2 > log/sidekiq.log 2>&1 &
+  SIDEKIQ_PID=$!
+  echo $SIDEKIQ_PID > tmp/pids/sidekiq.pid
+  log "Sidekiq started (PID: $SIDEKIQ_PID)"
 else
-  log "Skipping SolidQueue startup (SKIP_SOLID_QUEUE=true)"
+  log "Skipping Sidekiq startup (SKIP_SIDEKIQ=true)"
 fi
 
 # Set environment variables for optimal performance
@@ -135,9 +120,7 @@ export MALLOC_ARENA_MAX=2 # Reduce memory usage
 export RUBY_GC_HEAP_INIT_SLOTS=600000
 export RUBY_GC_HEAP_FREE_SLOTS_MIN_RATIO=0.20
 export RUBY_GC_HEAP_FREE_SLOTS_GOAL_RATIO=0.40
-export SOLID_QUEUE_POLLING_INTERVAL=5 # Reduce polling frequency
-export SOLID_QUEUE_DISPATCHER_CONCURRENCY=1 # Reduce concurrency
-export SOLID_QUEUE_WORKER_CONCURRENCY=1 # Reduce concurrency
+export SIDEKIQ_CONCURRENCY=2 # Reduce concurrency for development
 export OPTIMIZE_GC=true
 export OPTIMIZE_AR=true
 export OPTIMIZE_REDIS=true

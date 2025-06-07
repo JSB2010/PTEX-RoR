@@ -1,3 +1,1 @@
-web: bundle exec puma -p 3003
-worker: bundle exec rails runner "SolidQueue::Worker.new(concurrency: 1).start"
-dispatcher: bundle exec rails runner "SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start"
+web: SKIP_SOLID_QUEUE=true bundle exec puma -p 3003

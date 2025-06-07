@@ -27,12 +27,13 @@ if ARGV.first == 'server' || ARGV.first == 's'
     sleep 2
   end
 
-  # Start SolidQueue
-  solid_queue_script = File.expand_path('../start-solid-queue', __FILE__)
-  if File.exist?(solid_queue_script)
-    puts "Starting SolidQueue..."
-    system(solid_queue_script)
-  end
+  # DISABLED: Start SolidQueue (was causing recursive process spawning)
+  # Use bin/simple-solid-queue-start to start SolidQueue manually
+  # solid_queue_script = File.expand_path('../start-solid-queue', __FILE__)
+  # if File.exist?(solid_queue_script)
+  #   puts "Starting SolidQueue..."
+  #   system(solid_queue_script)
+  # end
 
   # Continue with standard Rails server command
   APP_PATH = File.expand_path('../config/application', __dir__)

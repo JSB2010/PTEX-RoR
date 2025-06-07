@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Script to start all components: PostgreSQL, Redis, SolidQueue, and Rails server
+# Script to start all components: PostgreSQL, Redis, Sidekiq, and Rails server
 
 # Change to the Rails root directory
 cd "$(dirname "$0")/.." || exit 1
@@ -12,11 +12,10 @@ log() {
 # Function to clean up resources before exit
 cleanup() {
   log "Cleaning up resources..."
-  
-  # Kill SolidQueue processes
-  pkill -f "SolidQueue::Dispatcher" 2>/dev/null || true
-  pkill -f "SolidQueue::Worker" 2>/dev/null || true
-  
+
+  # Kill Sidekiq processes
+  pkill -f "sidekiq" 2>/dev/null || true
+
   log "Cleanup complete"
 }
 
@@ -43,20 +42,14 @@ else
   log "Redis is already running."
 fi
 
-# Clean up any existing SolidQueue processes
-log "Cleaning up existing SolidQueue processes..."
-pkill -f "SolidQueue::Dispatcher" 2>/dev/null || true
-pkill -f "SolidQueue::Worker" 2>/dev/null || true
+# Clean up any existing Sidekiq processes
+log "Cleaning up existing Sidekiq processes..."
+pkill -f "sidekiq" 2>/dev/null || true
 
-# Start SolidQueue
-log "Starting SolidQueue..."
-bundle exec rails runner "SolidQueue::Dispatcher.new(concurrency: 1, polling_interval: 5).start" > log/solid_queue_dispatcher.log 2>&1 &
-DISPATCHER_PID=$!
-log "SolidQueue dispatcher started with PID: $DISPATCHER_PID"
-
-bundle exec rails runner "SolidQueue::Worker.new(concurrency: 1).start" > log/solid_queue_worker.log 2>&1 &
-WORKER_PID=$!
-log "SolidQueue worker started with PID: $WORKER_PID"
+# Start Sidekiq
+log "Starting Sidekiq..."
+bundle exec sidekiq -d -L log/sidekiq.log -P tmp/pids/sidekiq.pid
+log "Sidekiq started in daemon mode"
 
 # Start the Rails server
 log "Starting Rails server..."

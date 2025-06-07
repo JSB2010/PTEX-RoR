@@ -1,0 +1,24 @@
+development:
+  :concurrency: 3
+  :queues:
+    - default
+    - mailers
+    - active_storage
+  :timeout: 30
+  :retry: 3
+
+test:
+  :concurrency: 1
+  :queues:
+    - default
+  :timeout: 30
+  :retry: false
+
+production:
+  :concurrency: <%= ENV.fetch('SIDEKIQ_CONCURRENCY', 5) %>
+  :queues:
+    - default
+    - mailers
+    - active_storage
+  :timeout: 30
+  :retry: 3

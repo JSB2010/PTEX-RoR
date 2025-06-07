@@ -1,9 +1,14 @@
+# Require Net::HTTP for health checks
+require 'net/http'
+require 'json'
+
 # Perform health checks during startup in development and production
 if Rails.env.development? || Rails.env.production?
   Rails.application.config.after_initialize do
     if defined?(Rails::Server)
       puts "\nRunning startup health check..."
-      uri = URI.parse("http://localhost:#{ENV.fetch('PORT', 3000)}/health")
+      port = ENV.fetch('PORT', 3003)  # Default to 3003 for this project
+      uri = URI.parse("http://localhost:#{port}/health")
       
       Thread.new do
         begin

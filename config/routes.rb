@@ -1,3 +1,9 @@
+begin
+  require 'sidekiq/web'
+rescue LoadError
+  # Sidekiq not available, skip web interface
+end
+
 Rails.application.routes.draw do
   # Devise routes with custom controllers
   devise_for :users, controllers: {
@@ -24,6 +30,11 @@ Rails.application.routes.draw do
   # Admin namespace
   namespace :admin do
     root to: 'admin#index', as: :dashboard
+
+    # Sidekiq web interface for job monitoring (if available)
+    if defined?(Sidekiq::Web)
+      mount Sidekiq::Web => '/sidekiq'
+    end
     resources :users
     resources :courses do
       member do

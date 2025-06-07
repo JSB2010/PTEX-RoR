@@ -35,7 +35,8 @@ module ProcessManager
   end
 end
 
+# DISABLED: This was causing recursive process spawning
 # Start background processes after Rails initialization
-Rails.application.config.after_initialize do
-  ProcessManager.start_services unless Rails.env.test? || defined?(Rails::Console)
-end
+# Rails.application.config.after_initialize do
+#   ProcessManager.start_services unless Rails.env.test? || defined?(Rails::Console)
+# end

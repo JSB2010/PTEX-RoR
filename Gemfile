@@ -18,8 +18,8 @@ gem "redis", "~> 5.0"
 gem "redis-namespace"
 gem "redis-rack-cache", require: false # Only require when needed
 
-# Background job processing with SolidQueue - optimized
-gem "solid_queue"
+# Background job processing with Sidekiq - reliable and fast
+gem "sidekiq"
 gem "rufus-scheduler", '~> 3.9', require: false # Only require when needed
 
 # Security and performance
@@ -62,6 +62,8 @@ group :development, :test do
 
   # Security scanning - only load when needed
   gem "brakeman", require: false
+  gem "bundler-audit", require: false
+  gem "ruby_audit", require: false
 
   # Code style - only load when needed
   gem "rubocop-rails-omakase", require: false

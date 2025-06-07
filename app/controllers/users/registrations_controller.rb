@@ -52,7 +52,8 @@ class Users::RegistrationsController < Devise::RegistrationsController
   private
 
   def sign_up_params
-    params.require(:user).permit(:first_name, :last_name, :username, :email, :role, :password, :password_confirmation)
+    # Don't allow role assignment during registration - default to Student
+    params.require(:user).permit(:first_name, :last_name, :username, :email, :password, :password_confirmation)
   end
 
   def account_update_params

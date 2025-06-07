@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+# Safe development server startup - no recursive process spawning
+set -e
+
+APP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$APP_ROOT"
+
+echo "🚀 Starting PTEX-RoR development environment safely..."
+
+# Check if PostgreSQL is running
+if ! pg_isready -q 2>/dev/null; then
+  echo "⚠️  PostgreSQL is not running. Starting it..."
+  brew services start postgresql@14
+  sleep 3
+fi
+
+# Check if Redis is running
+if ! redis-cli ping >/dev/null 2>&1; then
+  echo "⚠️  Redis is not running. Starting it..."
+  brew services start redis
+  sleep 2
+fi
+
+echo "✅ Database services are running"
+
+# Clean up any existing SolidQueue processes
+echo "🧹 Cleaning up any existing SolidQueue processes..."
+pkill -f "SolidQueue" 2>/dev/null || true
+pkill -f "solid_queue" 2>/dev/null || true
+rm -f tmp/pids/solid_queue*.pid
+
+echo "📦 Starting Rails server (SolidQueue disabled)..."
+echo "   You can start SolidQueue manually in another terminal with:"
+echo "   bin/simple-solid-queue-start"
+echo ""
+echo "🌐 Server will be available at: http://localhost:3003"
+echo ""
+
+# Start Rails server with SolidQueue disabled
+SKIP_SOLID_QUEUE=true bundle exec rails server -p 3003
