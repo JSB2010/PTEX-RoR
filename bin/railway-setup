@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Railway Post-Deployment Setup Script
+echo "🚀 Setting up PTEX on Railway..."
+
+# Run database migrations
+echo "📊 Running database migrations..."
+bundle exec rails db:migrate
+
+# Check if we need to create the database first
+if [ $? -ne 0 ]; then
+    echo "📊 Creating database..."
+    bundle exec rails db:create
+    bundle exec rails db:migrate
+fi
+
+# Run seeds if they exist
+if [ -f "db/seeds.rb" ]; then
+    echo "🌱 Running database seeds..."
+    bundle exec rails db:seed
+fi
+
+# Create a default admin user if none exists
+echo "👤 Checking for admin user..."
+bundle exec rails runner "
+if User.where(role: 'admin').empty?
+  admin = User.create!(
+    email: 'admin@ptex.local',
+    password: 'admin123',
+    password_confirmation: 'admin123',
+    first_name: 'Admin',
+    last_name: 'User',
+    role: 'admin'
+  )
+  puts '✅ Created admin user: admin@ptex.local / admin123'
+else
+  puts '✅ Admin user already exists'
+end
+"
+
+echo "🎉 Setup complete!"
+echo ""
+echo "Default admin credentials:"
+echo "Email: admin@ptex.local"
+echo "Password: admin123"
+echo ""
+echo "⚠️  Please change the admin password after first login!"
