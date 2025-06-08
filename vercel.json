@@ -2,46 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "config.ru",
-      "use": "@vercel/ruby"
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/public/(.*)",
-      "headers": { "cache-control": "s-maxage=31536000,immutable" },
-      "dest": "/public/$1"
-    },
-    {
-      "src": "/assets/(.*)",
-      "headers": { "cache-control": "s-maxage=31536000,immutable" },
-      "dest": "/public/assets/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "/public/favicon.ico"
-    },
-    {
-      "src": "/robots.txt",
-      "dest": "/public/robots.txt"
-    },
-    {
       "src": "/(.*)",
-      "dest": "/config.ru"
+      "dest": "/public/index.html"
     }
-  ],
-  "env": {
-    "RAILS_ENV": "production",
-    "RAILS_SERVE_STATIC_FILES": "true",
-    "RAILS_LOG_TO_STDOUT": "true",
-    "SKIP_MIGRATION_CHECK": "true",
-    "SKIP_SIDEKIQ": "true",
-    "VERCEL_DEPLOYMENT": "true"
-  },
-  "functions": {
-    "config.ru": {
-      "runtime": "@vercel/ruby@3.0.1",
-      "maxDuration": 30
-    }
-  }
+  ]
 }

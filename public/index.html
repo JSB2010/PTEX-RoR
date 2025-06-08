@@ -71,15 +71,26 @@
         <p class="lead">Platform for Teachers, Educators, and Students</p>
         
         <div style="margin: 2rem 0;">
-            <span class="status-indicator"></span>
-            <strong>Platform Status:</strong> Initializing...
+            <span class="status-indicator" style="background-color: #f59e0b;"></span>
+            <strong>Platform Status:</strong> Deployment Notice
         </div>
-        
-        <p>The platform is starting up. This may take a few moments.</p>
-        
+
+        <div style="margin: 2rem 0; padding: 1.5rem; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <h3 style="margin-top: 0; color: #92400e;">⚠️ Deployment Platform Notice</h3>
+            <p style="margin-bottom: 0; color: #92400e;">
+                <strong>This Rails application requires a different hosting platform.</strong><br>
+                Vercel is optimized for static sites and serverless functions, not full-stack Rails applications.
+            </p>
+        </div>
+
         <div style="margin-top: 2rem;">
-            <a href="/status" class="btn">Check Detailed Status</a>
-            <a href="/login" class="btn">Go to Login</a>
+            <h3>Recommended Hosting Platforms:</h3>
+            <div style="text-align: left; margin: 1rem 0;">
+                <p><strong>🚀 Railway</strong> - <a href="https://railway.app" target="_blank">railway.app</a> (Free tier, excellent Rails support)</p>
+                <p><strong>🎯 Render</strong> - <a href="https://render.com" target="_blank">render.com</a> (Free tier, great for Rails)</p>
+                <p><strong>✈️ Fly.io</strong> - <a href="https://fly.io" target="_blank">fly.io</a> (Modern deployment platform)</p>
+                <p><strong>💜 Heroku</strong> - <a href="https://heroku.com" target="_blank">heroku.com</a> (Most Rails-friendly, paid)</p>
+            </div>
         </div>
         
         <div style="margin-top: 2rem; padding: 1rem; background: #f8fafc; border-radius: 8px; text-align: left;">
@@ -91,23 +102,10 @@
     </div>
     
     <script>
-        // Auto-refresh every 30 seconds to check if the Rails app is ready
-        setTimeout(function() {
-            window.location.reload();
-        }, 30000);
-        
-        // Try to redirect to the Rails app after 5 seconds
-        setTimeout(function() {
-            fetch('/status')
-                .then(response => {
-                    if (response.ok) {
-                        window.location.href = '/status';
-                    }
-                })
-                .catch(() => {
-                    // Rails app not ready yet, stay on this page
-                });
-        }, 5000);
+        // Add some interactivity
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('PTEX Platform - Please deploy to a Rails-compatible hosting service');
+        });
     </script>
 </body>
 </html>
