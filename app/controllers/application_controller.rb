@@ -1,8 +1,9 @@
 class ApplicationController < ActionController::Base
   include ErrorHandler
-  
+
   before_action :configure_permitted_parameters, if: :devise_controller?
-  before_action :authenticate_user!
+  before_action :check_database_connection
+  before_action :authenticate_user!, unless: :skip_authentication?
   layout :layout_by_resource
 
   protected
@@ -47,6 +48,26 @@ class ApplicationController < ActionController::Base
       'devise'
     else
       'application'
+    end
+  end
+
+  def check_database_connection
+    return if controller_name == 'status' # Skip for status controller
+
+    unless database_available?
+      redirect_to status_path and return
+    end
+  end
+
+  def skip_authentication?
+    controller_name == 'status' || ENV['VERCEL_DEPLOYMENT'] == 'true' && !database_available?
+  end
+
+  def database_available?
+    @database_available ||= begin
+      ActiveRecord::Base.connection.active?
+    rescue StandardError
+      false
     end
   end
 end

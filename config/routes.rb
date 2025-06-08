@@ -5,6 +5,9 @@ rescue LoadError
 end
 
 Rails.application.routes.draw do
+  # Status routes (accessible without database)
+  get '/status', to: 'status#deployment_status'
+
   # Devise routes with custom controllers
   devise_for :users, controllers: {
     registrations: 'users/registrations',
@@ -15,10 +18,10 @@ Rails.application.routes.draw do
     sign_up: 'register'
   }
 
-  # Unauthenticated root for guests
+  # Unauthenticated root for guests - with fallback to status page
   devise_scope :user do
     unauthenticated do
-      root 'devise/sessions#new', as: :unauthenticated_root
+      root 'status#index', as: :unauthenticated_root
     end
   end
 

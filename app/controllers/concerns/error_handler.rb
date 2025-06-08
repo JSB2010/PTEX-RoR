@@ -8,6 +8,11 @@ module ErrorHandler
     rescue_from ActionController::InvalidAuthenticityToken, with: :invalid_authenticity_token
     rescue_from ActionController::UnknownFormat, with: :unsupported_format
     
+    # Handle database connection errors
+    rescue_from ActiveRecord::ConnectionNotEstablished, with: :database_unavailable
+    rescue_from PG::ConnectionBad, with: :database_unavailable
+    rescue_from ActiveRecord::NoDatabaseError, with: :database_unavailable
+
     # Handle unauthorized access
     rescue_from StandardError do |e|
       case e
@@ -83,6 +88,15 @@ module ErrorHandler
         format.html { render 'shared/406', status: :not_acceptable }
         format.json { render json: { error: 'Unsupported format requested' }, status: :not_acceptable }
         format.any { head :not_acceptable }
+      end
+    end
+
+    def database_unavailable(exception)
+      log_error(exception)
+      respond_to do |format|
+        format.html { redirect_to status_path }
+        format.json { render json: { error: 'Database unavailable', status: 'deploying' }, status: :service_unavailable }
+        format.any { head :service_unavailable }
       end
     end
 

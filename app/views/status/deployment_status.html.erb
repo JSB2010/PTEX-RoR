@@ -1,0 +1,42 @@
+<div class="logo">PTEX</div>
+<h1>Platform Status</h1>
+<p class="lead">Learning Management System</p>
+
+<div class="status-list">
+  <div class="status-item">
+    <span class="status-indicator <%= @database_status ? 'status-up' : 'status-down' %>"></span>
+    <strong>Database:</strong> 
+    <%= @database_status ? 'Connected' : 'Not Available' %>
+  </div>
+  
+  <div class="status-item">
+    <span class="status-indicator <%= @redis_status ? 'status-up' : 'status-down' %>"></span>
+    <strong>Cache:</strong> 
+    <%= @redis_status ? 'Connected' : 'Not Available' %>
+  </div>
+  
+  <div class="status-item">
+    <span class="status-indicator status-up"></span>
+    <strong>Application:</strong> Running
+  </div>
+</div>
+
+<% if @database_status %>
+  <p>✅ All systems operational. You can access the platform.</p>
+  <%= link_to "Go to Platform", root_path, class: "btn" %>
+<% else %>
+  <p>⚠️ The platform is currently being deployed. Database connection is not yet available.</p>
+  <p>This is normal for Vercel deployments. Please check back in a few minutes or contact your administrator to configure the database connection.</p>
+  
+  <div style="margin-top: 2rem; padding: 1rem; background: #fef3c7; border-radius: 6px; text-align: left;">
+    <strong>For Administrators:</strong><br>
+    To complete the deployment, you need to:
+    <ol style="margin: 0.5rem 0;">
+      <li>Set up a PostgreSQL database (e.g., using Supabase, Railway, or Neon)</li>
+      <li>Configure the DATABASE_URL environment variable in Vercel</li>
+      <li>Run database migrations</li>
+    </ol>
+  </div>
+<% end %>
+
+<a href="javascript:location.reload()" class="btn" style="background: #6b7280;">Refresh Status</a>

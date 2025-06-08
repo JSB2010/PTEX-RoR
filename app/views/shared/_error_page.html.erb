@@ -15,10 +15,16 @@
       <% end %>
       
       <div class="d-flex justify-content-center gap-3">
-        <%= link_to root_path, class: "btn btn-primary" do %>
-          <i class="bi bi-house-door me-2"></i>Back to Home
+        <% if ENV['VERCEL_DEPLOYMENT'] == 'true' %>
+          <%= link_to status_path, class: "btn btn-primary" do %>
+            <i class="bi bi-activity me-2"></i>Check Status
+          <% end %>
+        <% else %>
+          <%= link_to root_path, class: "btn btn-primary" do %>
+            <i class="bi bi-house-door me-2"></i>Back to Home
+          <% end %>
         <% end %>
-        
+
         <% if local_assigns[:back_link] %>
           <%= link_to 'javascript:history.back()', class: "btn btn-outline-secondary" do %>
             <i class="bi bi-arrow-left me-2"></i>Go Back

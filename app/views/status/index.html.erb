@@ -1,0 +1,12 @@
+<% content_for :title, "PTEX - Platform Status" %>
+
+<div class="logo">PTEX</div>
+<h1>Welcome to PTEX</h1>
+<p class="lead">Learning Management System</p>
+
+<p>Checking platform status...</p>
+
+<script>
+  // Redirect to the appropriate page based on database availability
+  window.location.href = '<%= status_path %>';
+</script>
