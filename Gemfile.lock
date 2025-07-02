@@ -138,7 +138,7 @@ GEM
     et-orbi (1.2.11)
       tzinfo
     execjs (2.10.0)
-    faker (3.5.1)
+    faker (3.5.2)
       i18n (>= 1.8.11, < 2)
     ffi (1.17.1-aarch64-linux-gnu)
     ffi (1.17.1-arm64-darwin)
