@@ -14,7 +14,7 @@ gem "jbuilder"
 gem "devise"
 
 # Caching with Redis - optimized configuration
-gem "redis", "~> 5.0"
+gem "redis", "~> 5.4"
 gem "redis-namespace"
 gem "redis-rack-cache", require: false # Only require when needed
 
